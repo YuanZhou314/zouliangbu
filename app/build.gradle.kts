@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.zouliangbu.footprint"
-    compileSdk = 34
+    compileSdk = 33
 
     defaultConfig {
         applicationId = "com.zouliangbu.footprint"
         minSdk = 26
-        targetSdk = 34
+        targetSdk = 33
         versionCode = 1
         versionName = "0.1.0"
 
@@ -80,6 +80,10 @@ dependencies {
 // 3dmap 10.x 起已经把 AMapLocation/AMapLocationClient 等类内嵌在自身 jar 中（无 POM 传递依赖），
 // 所以不再单独声明 com.amap.api:location，否则会触发 Duplicate class。
     implementation("com.amap.api:3dmap:10.0.600")
+
+    // osmdroid：未配置高德 Key 时的过渡地图（OpenStreetMap 瓦片，无需 token）。
+    // 与高德并存：MapViewWrapper 按 AmapKey.isConfigured() 路由，有 key 自动切回高德。
+    implementation("org.osmdroid:osmdroid-android:6.1.20")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

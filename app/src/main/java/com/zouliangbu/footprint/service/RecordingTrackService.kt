@@ -11,6 +11,7 @@ import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.SystemClock
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.MainActivity
@@ -51,6 +52,7 @@ class RecordingTrackService : Service() {
 
         private const val NOTIF_CHANNEL = "track_recording"
         private const val NOTIF_ID = 0x701
+        private const val TAG = "TrackService"
 
         fun startIntent(context: Context, sessionId: Long): Intent =
             Intent(context, RecordingTrackService::class.java).apply {
@@ -85,15 +87,26 @@ class RecordingTrackService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> {
-                val incomingId = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
-                if (incomingId > 0L) {
-                    sessionId = incomingId
-                    startTracking()
+        // try/catch 兜底：把异常落 logcat，下次崩溃有迹可循，避免把进程直接拖死。
+        try {
+            when (intent?.action) {
+                ACTION_START -> {
+                    val incomingId = intent.getLongExtra(EXTRA_SESSION_ID, -1L)
+                    if (incomingId > 0L) {
+                        sessionId = incomingId
+                        startTracking()
+                    } else {
+                        Log.w(TAG, "ACTION_START but EXTRA_SESSION_ID missing/invalid: $incomingId")
+                    }
                 }
+                ACTION_STOP -> stopTracking()
+                null -> Log.w(TAG, "onStartCommand with null intent")
             }
-            ACTION_STOP -> stopTracking()
+        } catch (t: Throwable) {
+            Log.e(TAG, "onStartCommand failed (action=${intent?.action})", t)
+            // 兜底：清理前台通知 + 自杀，避免残留前台服务。
+            try { stopForeground(STOP_FOREGROUND_REMOVE) } catch (_: Throwable) {}
+            stopSelf()
         }
         return START_STICKY
     }
@@ -225,7 +238,10 @@ class RecordingTrackService : Service() {
     }
 
     private fun startForegroundCompat(notif: Notification) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+        // 3 参数 startForeground(id, notif, foregroundServiceType) 从 API 29 (Q) 引入。
+        // 在 API 34+ 上是强制的（不带 type 在 Android 14 上会抛 SecurityException）。
+        // 注意：不能用 Build.VERSION_CODES.UPSIDE_DOWN_CAKE（=34），因为 compileSdk=33 看不到这个常量。
+        if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
         } else {
             startForeground(NOTIF_ID, notif)

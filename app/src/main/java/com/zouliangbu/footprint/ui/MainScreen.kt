@@ -1,6 +1,7 @@
 package com.zouliangbu.footprint.ui
 
 import android.Manifest
+import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zouliangbu.footprint.data.db.TrackSession
 import com.zouliangbu.footprint.service.RecordingTrackService
-import com.zouliangbu.footprint.ui.map.AmapMapView
+import com.zouliangbu.footprint.ui.map.MapViewWrapper
 import com.zouliangbu.footprint.ui.theme.OnDarkMuted
 import com.zouliangbu.footprint.util.TimeFmt
 import java.text.SimpleDateFormat
@@ -63,25 +65,50 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 
     // 摘要对话框：service stop 后展示
     var summaryFor by remember { mutableStateOf<Long?>(null) }
-    var pendingStart by remember { mutableStateOf(false) }
 
-    // 权限 launcher：先请求权限，拿到后再创建会话 + 启动 service
-    val permissionLauncher = rememberLauncherForActivityResult(
+    // 权限分两步：拆成两个 launcher，因为一个 launcher 不能在自己的 callback 里再 launch 自身
+    // （Kotlin 的 val 必须在初始化后才能引用）。Android 10+ 强制后台定位必须单独请求。
+    var pendingStep by remember { mutableStateOf<Int?>(null) }
+
+    fun proceedToStart() {
+        pendingStep = null
+        vm.startSession { sid ->
+            context.startForegroundService(
+                RecordingTrackService.startIntent(context, sid)
+            )
+        }
+    }
+
+    // 第二步：后台定位（Android 10+）。不论结果都允许开始前台记录——后台权限仅影响息屏后能否继续采集。
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ ->
+        proceedToStart()
+    }
+
+    // 第一步：前台定位 + 通知（Android 13+）。拿到 FINE 后再决定是否触发第二步。
+    val foregroundPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
         val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
-        if (fineGranted && pendingStart) {
-            pendingStart = false
-            vm.startSession { sid ->
-                context.startForegroundService(
-                    RecordingTrackService.startIntent(context, sid)
-                )
-            }
+        if (!fineGranted) {
+            pendingStep = null
+            return@rememberLauncherForActivityResult
+        }
+        val bgPerms = backgroundPermissions()
+        val bgAlreadyGranted = bgPerms.isEmpty() ||
+                ContextCompat.checkSelfPermission(context, bgPerms[0]) ==
+                PackageManager.PERMISSION_GRANTED
+        if (bgAlreadyGranted) {
+            proceedToStart()
+        } else {
+            pendingStep = 2
+            backgroundPermissionLauncher.launch(bgPerms)
         }
     }
 
     Box(Modifier.fillMaxSize()) {
-        AmapMapView(Modifier.fillMaxSize())
+        MapViewWrapper(Modifier.fillMaxSize())
 
         // 记录中浮层：顶部居中
         if (snapshot != null) {
@@ -115,7 +142,10 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 
         // 底部控制栏：唯一一个大的开始/停止按钮
         Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding(),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 8.dp
         ) {
@@ -127,19 +157,25 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                 if (!isRecording) {
                     Button(
                         onClick = {
-                            // 检查权限；若已授权则直接开始，否则让 launcher 处理
-                            val alreadyGranted = ContextCompat.checkSelfPermission(
+                            // 第一步：检查前台定位权限；若已授权直接进入第二步
+                            val fineGranted = ContextCompat.checkSelfPermission(
                                 context, Manifest.permission.ACCESS_FINE_LOCATION
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-                            if (alreadyGranted) {
-                                vm.startSession { sid ->
-                                    context.startForegroundService(
-                                        RecordingTrackService.startIntent(context, sid)
-                                    )
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (fineGranted) {
+                                // 第一步已有权，跳到第二步
+                                val bgPerms = backgroundPermissions()
+                                val bgGranted = bgPerms.isEmpty() ||
+                                        ContextCompat.checkSelfPermission(context, bgPerms[0]) ==
+                                        PackageManager.PERMISSION_GRANTED
+                                if (bgGranted) {
+                                    proceedToStart()
+                                } else {
+                                    pendingStep = 2
+                                    backgroundPermissionLauncher.launch(bgPerms)
                                 }
                             } else {
-                                pendingStart = true
-                                permissionLauncher.launch(requiredPermissions())
+                                pendingStep = 1
+                                foregroundPermissionLauncher.launch(foregroundPermissions())
                             }
                         },
                         modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -214,17 +250,25 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
 }
 
 /**
- * 按平台 API 选择要请求的权限集合。
- * - ACCESS_FINE_LOCATION：所有版本都需要。
- * - ACCESS_BACKGROUND_LOCATION：Android 10 (API 29) 强制要求单独请求。
- * - POST_NOTIFICATIONS：Android 13 (API 33) 起通知运行时权限。
+ * 权限分两步请求：
+ *
+ * - **前台权限**：ACCESS_FINE_LOCATION + ACCESS_COARSE_LOCATION + （Android 13+）POST_NOTIFICATIONS。
+ * - **后台权限**（仅 Android 10+）：ACCESS_BACKGROUND_LOCATION。
+ *
+ * Android 10+ 强制要求后台定位必须**单独**请求（不能跟其他 dangerous 权限同组），否则系统静默忽略；
+ * Android 13+ 的 POST_NOTIFICATIONS 同理。两步走确保每个对话框都能弹出来。
  */
-private fun requiredPermissions(): Array<String> = buildList {
+private fun foregroundPermissions(): Array<String> = buildList {
     add(Manifest.permission.ACCESS_FINE_LOCATION)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        add(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-    }
+    add(Manifest.permission.ACCESS_COARSE_LOCATION)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         add(Manifest.permission.POST_NOTIFICATIONS)
     }
 }.toTypedArray()
+
+private fun backgroundPermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        arrayOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    } else {
+        emptyArray()
+    }
