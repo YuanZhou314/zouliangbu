@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">走路簿</string>
+
+    <!--
+        高德 AMap Android SDK API Key。
+        TODO 配置步骤：
+          1. 访问 https://lbs.amap.com 注册高德开发者账号。
+          2. 控制台 → 应用管理 → 创建新应用 → 平台选「Android」。
+          3. Package Name = com.zouliangbu.footprint
+             SHA1 取法：
+               keytool -list -v -keystore ~/.android/debug.keystore \
+                       -storepass android -alias androiddebug
+             或 Gradle 任务：./gradlew :app:signingReport
+          4. 把高德下发的 32 字符 Key 替换下面的 REPLACE_WITH_YOUR_AMAP_KEY。
+        没有 Key 时 App 仍可编译和安装，地图区显示「请配置高德 Key」占位。
+    -->
+    <string name="amap_api_key">REPLACE_WITH_YOUR_AMAP_KEY</string>
+</resources>
