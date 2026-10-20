@@ -18,6 +18,13 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Room schema 导出（P2.1）：每版表结构存档到 app/schemas/，写 Migration 与迁移测试都靠它。
+// 必须在 Room 注解处理之前以 KSP 参数形式生效，所以放在 plugins 之后、android 之前。
+// 关掉 exportSchema 的话，历史 schema 一旦错过就再也补不回来。
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+
 // 读取 local.properties 中的签名配置
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
