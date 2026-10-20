@@ -9,6 +9,45 @@
 
 ---
 
+## [2026-10-20] 阶段性暂停：进度文档同步 + 仓库全量入库（buildNumber=12）
+
+### 触发
+用户决定暂停功能开发，要求把进度文档更新到位，然后整个仓库全量提交 + 推送到 GitHub。
+
+### 本轮只改文档，不动代码
+| 文档 | 变更 |
+|---|---|
+| `README.md` | **整篇重写**。旧版停在"单页 + 只做记录闭环"时代，还写着「列表之外的功能一律不做」，
+与现在五栏结构 + 列表/详情/GPX 全部落地的现实矛盾。新版含：进度表（P0–P6）、功能清单、
+项目结构（按当前 61 个 kt 实况）、关键约定（坐标系/距离/时长/改表/地图类型）、测试清单、文档索引 |
+| `ROADMAP.md` | §0 一句话判断改为「记录、看、不丢都站起来了，算还没开始」；§2 基线从 `buildNumber=3`
+更新为 `buildNumber=12`（61 kt / 5479 行 / 45 用例 / 53.8 MB）；§9 的 README 条目标为已修 |
+| `CHANGELOG.md` | 本条（会话收尾总结） |
+
+### 提交范围说明
+- 全量 `git add -A`：App 源码、`zouliangbu-server`、`app/schemas/*.json`、全部 `.md`、
+  `zlb-debug.keystore`、`.gitattributes`。
+- **仍按 `.gitignore` 排除**：`version.properties`（每 build +1，属构建产物）、`*.apk`、`build/`、
+  `local.properties`（本机 SDK 路径）、`.workbuddy/`（本地工作记忆）。
+- 一并带入**并行会话**的服务端静态检查改动：`ContentDtos.FeedItem` 补 `coverStyle` 字段
+  （App 侧该字段无默认值，缺了会让 kotlinx.serialization 抛 `MissingFieldException`，S4 接网络首屏必崩）
+  + 3 个字段集契约测试，`mvn test` 15/15。
+
+### 暂停时的现状快照
+- 代码：61 个 kt（main）/ 5479 行；6 个测试文件 / **45 用例全绿**；Room v3 + schemas 1/2/3 入库
+- 产物：`app-debug.apk` 0.1.0.000012 / versionCode 10012 / 53.8 MB
+- P1 八项清零；P2 完成 5/8（2.1 / 2.2 / 2.3 / 2.4 / 2.7）
+
+### 遗留待验证（下次开工先看这里）
+1. **P2.5 抽稀**：详情页长轨迹（> 2 万点）全量喂地图，性能未测。
+2. **P2.6 批量写**：`TrackPointDao` 仍逐点 insert，1 小时耗电未实测。
+3. **P2.8 持锁**：`WAKE_LOCK` 已声明但未使用，息屏后点间隔可能拉长。
+4. **真机从未跑过**：本机只出包。画线、暂停、GPX 坐标精度、v1→v2→v3 迁移全部待装机验证；
+   迁移若失败，logcat 关键字 `Room cannot verify the data integrity`。
+5. `LOCAL_ENV.md` 仍是 macOS 路径，Windows 段未补。
+
+---
+
 ## [2026-10-20] P2 开工：悬挂会话恢复 + Service/UI 一致 + 暂停继续（buildNumber=12）
 
 ### 触发
@@ -133,7 +172,48 @@ schema 比对：2.json 相对 1.json 只多 track_sessions.name TEXT(可空)，�
 
 ---
 
-## [2026-10-20] 服务端未来计划成文（SERVER-ROADMAP v1）
+## [2026-10-20] 服务端静态检查：修掉 FeedItem 漏字段（S4 必崩的 P0）
+
+### 触发
+用户要求停服务、只做静态检查。编译零 warning，但逐字段比对"服务端 DTO ↔ App model"时发现缺陷。
+
+### 缺陷
+服务端 `ContentDtos.FeedItem` **没有返回 `coverStyle`**，而 App 侧：
+
+```kotlin
+data class FeedItem(
+    val id: String, val title: String, val author: String, val likeCount: Int,
+    val city: String, val coverStyle: Int,          // ← 没有默认值
+    val coverAspectRatio: Float = 1f, val coverUrl: String? = null
+)
+```
+
+`coverStyle` 无默认值 → kotlinx.serialization 遇到缺字段直接抛 `MissingFieldException`，
+**不是降级成 0**。S4 一接网络，首页第一屏就崩。
+（`RouteItem` 服务端是返回 `coverStyle` 的，所以这条是 FeedItem 单独漏了，不是设计如此。）
+
+### 修复
+- `ContentDtos.FeedItem` 加 `int coverStyle`，位置与 App 模型一致（city 之后）
+- `ContentQueryService.toFeedItem` 用 `id % 5` 计算，与 `toRouteItem` 同一套规则
+- 新增 3 个**字段集契约测试**：`$.data.items[0].length() == 8` + 逐字段 `.exists()`；
+  `coverUrl` 恒为 null，用 `hasJsonPath()` 断言"字段在"而非"值非空"；
+  同时锁住 `RouteSection.subtitle` 必须是 string（不能 null）
+
+`mvn test` → **15/15 绿**（原 12 + 3）
+
+### 其余静态发现（只记录，未改）
+1. `city` 精确匹配：App 定位返回"萍乡市"、库里是"萍乡"→ 0 条。S4 前必须统一口径。
+2. 分组顺序/条目数与 Mock 不同（服务端 `sort_weight ASC` = 进阶→新手→口碑；Mock 是口碑→新手→进阶，
+   且 Mock 有跨分组重复）→ 接后端后首页卡片会变少、顺序会变，属预期需提前告知。
+3. `application.yml` 硬编码 `spring.profiles.active: dev` → 生产忘传 profile 会**静默跑 H2 内存库**。
+   建议改 `spring.profiles.default: dev`，并在 prod 下检测到 H2 就 fail fast。
+4. 校验消息中英混杂（`@Max` 的 msg 走 Hibernate Validator 本地化包，Linux `LANG=C` 会变英文）。
+5. `qw.last("LIMIT " + n)` 字符串拼 SQL（当前安全，但属危险写法）；
+   非法 cursor 静默从头返回 200（S4 循环拉页时可能重复拉第一页）。
+
+---
+
+
 
 ### 触发
 服务端 v1 跑通后需要一份"往后做什么"的计划，且必须和 App 侧 `ROADMAP.md` 对齐（App 仍在开发中）。

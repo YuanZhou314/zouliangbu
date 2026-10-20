@@ -16,7 +16,8 @@
 
 注意：
 - 定位 SDK（`location/LocationProvider.kt` 用 `AMapLocationClient`）**不依赖 Key**，独立可用。
-- 当前实际跑的是 osmdroid 分支（高德 Key 还在申请中）。
+- 高德 Key 已配置在 `res/values/strings.xml`（debug keystore = `zlb-debug.keystore`，已入库）。
+  真机若无网/Key 校验失败会自动落到 osmdroid 分支——**该分支按 D1 不画轨迹线，只有蓝点**。
 
 ## UI 导航框架（2026-10-20 会话产物，硬约束）
 - **双层 NavHost**：外层 `tabs / record / track/{sessionId}`（`ui/AppRoot.kt`），
