@@ -124,4 +124,20 @@ class GpxWriterTest {
     fun `轨迹名默认带开始时间`() {
         assertTrue(GpxWriter.defaultName(session).startsWith("走两步 "))
     }
+
+    @Test
+    fun `会话自带名字时导出沿用它而不是用时间`() {
+        // 导入的 GPX 带 <trk><name>，导出时必须保留——否则「导入再导出」等于把别人的名字洗掉了
+        val named = session.copy(name = "武功山穿越")
+        assertEquals("武功山穿越", GpxWriter.defaultName(named))
+
+        val xml = GpxWriter.build(named, listOf(point(39.9, 116.4)))
+        assertTrue("metadata 里应保留原名", xml.contains("<name>武功山穿越</name>"))
+
+        // 空白名字要退化成时间兜底，不能导出 <name>   </name>
+        assertEquals(
+            GpxWriter.defaultName(session),
+            GpxWriter.defaultName(session.copy(name = "   "))
+        )
+    }
 }

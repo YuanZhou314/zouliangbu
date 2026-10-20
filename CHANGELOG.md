@@ -9,7 +9,97 @@
 
 ---
 
-## [2026-10-20] P1.5–P1.7 地基：坐标转换 + GPX 读写 + 首批单测（buildNumber=7）
+## [2026-10-20] P1 收尾：历史列表 + 详情回看 + GPX 导入（buildNumber=8）
+
+### 触发
+你确认按 1.3 → 1.4 → 2.1 → 1.7/1.8 推进。执行时**调整了一处顺序**：先做 2.1（Room schema 导出），
+再改表。理由见「关键决策 1」。
+
+### 产出
+
+| 文件 | 变更 |
+|---|---|
+| `app/build.gradle.kts` | `ksp { arg("room.schemaLocation", "$projectDir/schemas") }` |
+| `data/db/AppDatabase.kt` | `exportSchema=true`、version=2、`MIGRATION_1_2`、`addMigrations()` |
+| `app/schemas/.../{1,2}.json` | v1 与 v2 表结构存档（**必须入库**） |
+| `data/db/TrackSession.kt` | 新增 `name: String?`（导入 GPX 带过来的轨迹名） |
+| `data/db/TrackSummary.kt` | 新增。列表投影：会话 + `pointCount`，一条 SQL 带子查询（避免 N+1） |
+| `data/db/TrackSessionDao.kt` | `observeCompleted()` / `deleteById()` |
+| `data/db/TrackPointDao.kt` | `insertAll()` 批量写 / `deleteForSession()` |
+| `data/repo/TrackRepository.kt` | 改持 `AppDatabase`；`observeCompleted` / `importTrack`（单事务）/ `deleteSession` |
+| `export/GpxImport.kt` | 新增。解析结果 → TrackPoint（纯计算，可 JVM 测） |
+| `export/GpxWriter.kt` | `defaultName` 优先用 `session.name`（导入再导出不丢名字） |
+| `ui/tracks/TrackListScreen.kt` + `TrackListViewModel.kt` | 新增。列表 / 空态 / 长按删除 / SAF 导入 |
+| `ui/tracks/TrackDetailScreen.kt` + `TrackDetailViewModel.kt` | 新增。地图 `autoZoom` + 起终点 marker + 统计卡 + 导出 |
+| `ui/navigation/AppRoute.kt` | `TRACKS` / `TRACK_DETAIL` / `trackDetail(id)` |
+| `ui/AppRoot.kt` | 详情页挂**外层**全屏路由 |
+| `ui/tabs/MainTabsScreen.kt` | 内层加 `tracks` destination |
+| `ui/profile/ProfileScreen.kt` | 「我的记录」卡片与「户外足迹→轨迹」接通 |
+| `ui/record/RecordScreen.kt` | 摘要卡加「查看轨迹」；「关闭」移到 `dismissButton` |
+
+### 关键决策
+
+1. **顺序调整：2.1 先做**。schema 导出打开之前的历史版本补不回来——趁 version 还是 1 时先固化
+   `1.json`，再改表升 2。若先做列表、后补 2.1，`1.json` 会永久缺失，以后想验迁移连基线都没有。
+2. **`name` 字段走 version 2 + `Migration(1,2)`**，不用 `fallbackToDestructiveMigration`。
+   改表顺手把迁移链路跑通一次：这条链路以后每次改表都要走，第一次就验证比第 5 次才发现问题便宜。
+3. **详情页放外层 NavHost**：要占满屏幕看地图，不能被底栏和 Scaffold padding 挤压；
+   列表放内层，保留底栏（它属于「我的」的下钻）。
+4. **列表点数用子查询，不逐项查库**：LazyColumn 里逐项查是 N+1，滚动时每帧碰磁盘。
+5. **导入 mime 用 `*/*`**：GPX 在不同来源被标成 octet-stream / text/xml / 甚至 application/zip，
+   按 mime 过滤的结果是"用户在文件选择器里根本看不到自己的 gpx"。合法性交给解析器判。
+6. **导入的转换逻辑单独抽 `GpxImport`**：整条链路只有这段有判断逻辑、也只有这段会算错
+   （时间兜底 / 海拔兜底 / 距离累计），抽成纯函数就能在 JVM 里测。
+7. **列表长按删除**：ROADMAP 没要求，但导入坏文件会堆出 0 点会话，不给删除用户只能清应用数据。
+
+### 校验
+```
+./gradlew :app:compileDebugKotlin   → 零 warning
+./gradlew :app:testDebugUnitTest    → 31/31 绿
+  CoordTransformTest 6 / GpxWriterTest 9 / GpxParserTest 7 / GpxImportTest 9
+./gradlew :app:assembleDebug        → 0.1.0.000008 (10008) 53.8 MB
+schema 比对：2.json 相对 1.json 只多 track_sessions.name TEXT(可空)，与 ALTER 语句完全对应
+```
+
+### 已知限制 / 待验证
+- **迁移没在真机上跑过**（本机只出包）。装机后第一次启动若崩，看 logcat 里的
+  `Room cannot verify the data integrity`——那说明迁移 SQL 与 schema 不一致。
+- 详情页长轨迹未测性能：目前全量点直接喂地图，2 万点以上需要 P2.5 抽稀。
+- 导入只认 `trk/trkseg/trkpt`；KML、`rte`、`wpt` 不支持。
+- 列表暂无搜索 / 筛选（P1 范围外）。
+
+### 下一步
+**P1 八项全部完成（1.1–1.8）**。接着做 P2.2 悬挂会话恢复 → 2.3 Service/UI 一致 → 2.4 暂停继续，
+这三项都依赖 2.1 刚铺好的表能力。
+
+---
+
+## [2026-10-20] 服务端未来计划成文（SERVER-ROADMAP v1）
+
+### 触发
+服务端 v1 跑通后需要一份"往后做什么"的计划，且必须和 App 侧 `ROADMAP.md` 对齐（App 仍在开发中）。
+
+### 产出
+
+| 文件 | 作用 |
+|---|---|
+| `SERVER-ROADMAP.md`（新增） | 服务端 S4–S8 分期、与 APK 的对接方案、接口演进规则、S4 验收标准 |
+| `ROADMAP.md` | 顶部配套文档 + P6 段 + §8 B 线补交叉引用（双向可达，避免两份计划各自漂移） |
+
+### 核心结论（写进文档的判断）
+
+1. **服务端不在 App 的关键路径上**：P1 闭环 / P2 可靠性 / P3 数据 / P5 安全全部纯本地，一行服务端代码都不需要；
+   只有 P4 离线包（可选）和 P6 内容层需要。→ **S4 排在 App P1 之后，不许抢时间。**
+2. **轨迹永不上云**是产品差异化，不是暂缓项。将来做"分享轨迹"走 App 端导出 GPX/海报，不上传。
+3. 实测确认 App 三个 Repository 签名与"UI 零改动"承诺有三处冲突
+   （`observeFeed` 无分页 / `observeCatalog` 无 keyword / `categories()` 是同步函数），
+   文档里给了 S4 过渡方案 + S6 正式方案 + 技术债上限（200 条 / 12 条）。
+4. `network_security_config.xml` **不支持 CIDR**，`<domain>192.168.0.0</domain>` 无效，只能写具体 IP
+   或 debug 下用 `base-config` 全放行——这是 S4 联调的常见卡点，提前写进文档。
+
+---
+
+## [2026-10-20] P1.5–P1.7：坐标转换 + GPX 导入导出 + 首批 21 个单测（buildNumber=7）
 
 ### 触发
 真机画线暂时测不了 → 转做**不依赖设备、能在 JVM 上跑验证**的部分。

@@ -92,9 +92,13 @@ object GpxWriter {
     fun suggestFileName(session: TrackSession): String =
         "走两步_" + fileNameTime.format(Instant.ofEpochMilli(session.startTime)) + ".gpx"
 
-    /** 轨迹默认名（TrackSession 目前没有用户命名字段，用开始时间兜底）。 */
+    /**
+     * 轨迹名：**优先用会话自己的名字**（导入的 GPX 会带 `<trk><name>`，
+     * 导出时不能把别人起的名字丢掉），没有才用开始时间兜底。
+     */
     fun defaultName(session: TrackSession): String =
-        "走两步 " + displayTime.format(Instant.ofEpochMilli(session.startTime))
+        session.name?.takeIf { it.isNotBlank() }
+            ?: ("走两步 " + displayTime.format(Instant.ofEpochMilli(session.startTime)))
 
     private fun isValid(lat: Double, lng: Double): Boolean =
         lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0

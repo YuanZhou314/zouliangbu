@@ -1,0 +1,18 @@
+package com.zouliangbu.footprint.data.db
+
+/**
+ * 历史列表用的会话投影：比 [TrackSession] 多一个点数。
+ *
+ * 为什么不让列表每项再去查一次点数：LazyColumn 逐项查库会出现 N+1 查询，
+ * 列表滚动时每帧都在碰磁盘。这里用一条带子查询的 SQL 一次算完。
+ *
+ * 不是 @Entity——Room 会把它当普通 POJO 按列名映射，所以 SQL 里必须显式 `AS` 别名。
+ */
+data class TrackSummary(
+    val id: Long,
+    val startTime: Long,
+    val endTime: Long?,
+    val totalDistanceMeters: Float,
+    val name: String?,
+    val pointCount: Int
+)

@@ -79,6 +79,7 @@ import java.util.Locale
 @Composable
 fun RecordScreen(
     onBack: () -> Unit,
+    onOpenDetail: (Long) -> Unit,
     vm: RecordViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -279,6 +280,13 @@ fun RecordScreen(
                 },
                 confirmButton = {
                     Row {
+                        // 停止后直接进详情回看（P1.8）：比"关闭摘要再去我的里翻"少两步。
+                        TextButton(
+                            onClick = {
+                                summaryFor = null
+                                onOpenDetail(sid)
+                            }
+                        ) { Text("查看轨迹") }
                         // 导出 GPX：写 cacheDir → FileProvider 授权 → 系统分享面板。
                         // 坐标在 GpxWriter 里转成 WGS-84，外部软件打开才不会偏几百米。
                         TextButton(
@@ -296,8 +304,11 @@ fun RecordScreen(
                                 }
                             }
                         ) { Text("导出 GPX") }
-                        TextButton(onClick = { summaryFor = null }) { Text("关闭") }
                     }
+                },
+                // 「关闭」放 dismissButton：三个按钮挤在 Confirm 行里，在窄屏上会被裁掉。
+                dismissButton = {
+                    TextButton(onClick = { summaryFor = null }) { Text("关闭") }
                 }
             )
         }

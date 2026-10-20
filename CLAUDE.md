@@ -19,9 +19,12 @@
 - 当前实际跑的是 osmdroid 分支（高德 Key 还在申请中）。
 
 ## UI 导航框架（2026-10-20 会话产物，硬约束）
-- **双层 NavHost**：外层 `tabs / record`（`ui/AppRoot.kt`），内层 `home/routes/gear/profile`
-  （`ui/tabs/MainTabsScreen.kt`）。record 是外层独立 destination → 天然全屏无底栏，
+- **双层 NavHost**：外层 `tabs / record / track/{sessionId}`（`ui/AppRoot.kt`），
+  内层 `home/routes/gear/profile/tracks`（`ui/tabs/MainTabsScreen.kt`）。
+  record 与详情页都是外层独立 destination → 天然全屏无底栏，
   不要改成"单 NavHost + 条件 bottomBar"（innerPadding 跳变会让地图 resize）。
+- **详情页必须在外层**：它要占满屏幕看地图；放进内层会被底栏 + Scaffold padding 挤压。
+  列表页 `tracks` 放内层（属于「我的」下钻，保留底栏，用户可随时切 tab）。
 - **navigation-compose 锁 2.7.7，禁止升 2.8+**：其传递依赖把 Compose 抬到 1.7.x，
   与 Kotlin 1.9.24 / compiler 1.5.14 冲突。改完依赖跑
   `./gradlew :app:dependencies --configuration debugRuntimeClasspath` 确认 compose 全 1.6.8。
@@ -143,16 +146,39 @@
    两处必须一致；导出目录 `cacheDir/gpx/` 与 `res/xml/file_paths.xml` 的 `<cache-path>` 对应。
 4. GPX 时间写 **UTC + `Z`**（本地时区会让别的软件算错配速）；坐标 6 位小数；
    海拔 0 不写 `<ele>`（高德拿不到海拔时给 0）。
-5. 单测基线：`./gradlew :app:testDebugUnitTest` → 21 用例全绿
-   （CoordTransform 6 / GpxWriter 8 / GpxParser 7）。改坐标或 GPX 逻辑必须保持全绿。
+5. 单测基线：`./gradlew :app:testDebugUnitTest` → **31 用例全绿**
+   （CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9）。
+   改坐标、GPX 或导入转换逻辑必须保持全绿。
+
+## Room 表结构与迁移（P2.1 产物，硬约束）
+
+**任何 entity 改动都必须走这三步，缺一就会让已装机的用户崩在启动页**：
+1. `AppDatabase` 的 `version` +1
+2. 在 `MIGRATIONS` 里加 `Migration(old, new)`，写清 ALTER / 建表 SQL
+3. 编译后 `app/schemas/<db>/<new>.json` **必须跟着提交**
+
+其他约束：
+- **禁止 `fallbackToDestructiveMigration()`**：那等于用户轨迹全丢。宁可启动时报错让人发现。
+- `exportSchema=true` 是 2026-10-20 打开的，`1.json` 是当时固化的 v1 基线。
+  历史 schema 补不回来，所以**改表前先确认当前版本 json 已在仓库里**。
+- 当前 v2 只加了一列：`track_sessions.name TEXT`（可空）。**不要**给已有列改类型或加 NOT NULL，
+  SQLite 的 ALTER 不支持，得走"建新表 → 拷数据 → 重命名"那一套。
+- 列表的点数用 `TrackSummary`（非 @Entity 的 POJO）：SQL 里**必须显式 `AS` 别名**，
+  Room 靠列名映射。不要在 LazyColumn 里逐项查库（N+1）。
+- 新增查询后看一遍编译日志：Room 在编译期校验 SQL 列与返回类型是否匹配，编译过 = 映射对。
 
 ## 关键文件速查
 
 | 文件 | 作用 |
 |---|---|
 | `app/build.gradle.kts` | 依赖：AMap 10.0.600 + osmdroid 6.1.20 + navigation-compose 2.7.7；版本自增（version.properties） |
-| `ui/AppRoot.kt` | 外层 NavHost（tabs / record） |
-| `ui/tabs/MainTabsScreen.kt` | 主框架：Scaffold + 内层四 tab NavHost + 底栏 |
+| `ui/AppRoot.kt` | 外层 NavHost（tabs / record / track/{id}） |
+| `ui/tabs/MainTabsScreen.kt` | 主框架：Scaffold + 内层 NavHost（home/routes/gear/profile/tracks）+ 底栏 |
+| `ui/tracks/TrackListScreen.kt` | 历史列表：空态 / 长按删除 / SAF 导入 GPX |
+| `ui/tracks/TrackDetailScreen.kt` | 详情回看：地图 autoZoom + 起终点 marker + 统计卡 + 导出 |
+| `data/db/TrackSummary.kt` | 列表投影（会话 + pointCount），非 @Entity |
+| `export/GpxImport.kt` | 解析结果 → TrackPoint（纯计算，JVM 可测） |
+| `app/schemas/**/*.json` | Room 表结构存档，**随表结构变更一起提交** |
 | `ui/components/AppBottomBar.kt` | 五槽底栏 + 凸起出发圆钮 + 记录中红点 |
 | `ui/home` `ui/routes` `ui/gear` `ui/profile` | 四个内容 tab（mock 数据 + Repository 接口） |
 | `ui/record/RecordScreen.kt` | 出发页（原 MainScreen 全部能力 + 返回键），权限两步逻辑在此 |

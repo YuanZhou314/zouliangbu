@@ -19,9 +19,7 @@ import java.io.File
 class FootprintApp : Application() {
 
     val database: AppDatabase by lazy { AppDatabase.get(this) }
-    val repository: TrackRepository by lazy {
-        TrackRepository(database.sessionDao(), database.pointDao())
-    }
+    val repository: TrackRepository by lazy { TrackRepository(database) }
 
     /** 全 App 共享的唯一定位提供者：地图蓝点、定位按钮、记录 Service 都从这里订阅。 */
     val locationProvider: LocationProvider by lazy { LocationProvider(this) }

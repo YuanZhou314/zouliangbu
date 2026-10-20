@@ -1,19 +1,26 @@
 package com.zouliangbu.footprint.ui
 
 import androidx.compose.runtime.Composable
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.zouliangbu.footprint.ui.navigation.AppRoute
 import com.zouliangbu.footprint.ui.record.RecordScreen
 import com.zouliangbu.footprint.ui.tabs.MainTabsScreen
+import com.zouliangbu.footprint.ui.tracks.TrackDetailScreen
 
 /**
  * App 根导航（外层）：
- *   tabs   → 主框架（底栏 + 四个内容 tab）
- *   record → 全屏记录页（原 MainScreen 能力，无底栏，返回回主框架）
+ *   tabs         → 主框架（底栏 + 五个内层 destination）
+ *   record       → 全屏记录页（无底栏）
+ *   track/{id}   → 全屏轨迹详情（无底栏）
  *
- * 两个 NavController 都提在根部：进入 record 时内层 NavHost 虽离开组合，
+ * 详情页挂在**外层**是有意的：记录页停止后的摘要卡、历史列表都能跳进来，
+ * 且不被底栏挤占地图高度。两个入口共用同一条路由。
+ *
+ * 两个 NavController 都提在根部：进入 record/detail 时内层 NavHost 虽离开组合，
  * 返回后 tab 栈与页面状态靠 saveState/restoreState 恢复。
  */
 @Composable
@@ -21,17 +28,35 @@ fun AppRoot() {
     val rootNav = rememberNavController()
     val tabNav = rememberNavController()
 
+    // 详情入口：记录页与历史列表都要用，抽成一个 lambda 避免两处写重复的导航参数。
+    val openTrackDetail: (Long) -> Unit = { sessionId ->
+        rootNav.navigate(AppRoute.trackDetail(sessionId)) { launchSingleTop = true }
+    }
+
     NavHost(navController = rootNav, startDestination = AppRoute.TABS) {
         composable(AppRoute.TABS) {
             MainTabsScreen(
                 tabNav = tabNav,
                 onOpenRecord = {
                     rootNav.navigate(AppRoute.RECORD) { launchSingleTop = true }
-                }
+                },
+                onOpenTrackDetail = openTrackDetail
             )
         }
         composable(AppRoute.RECORD) {
-            RecordScreen(onBack = { rootNav.popBackStack() })
+            RecordScreen(
+                onBack = { rootNav.popBackStack() },
+                onOpenDetail = openTrackDetail
+            )
+        }
+        composable(
+            route = AppRoute.TRACK_DETAIL,
+            arguments = listOf(
+                navArgument(AppRoute.ARG_SESSION_ID) { type = NavType.LongType }
+            )
+        ) { entry ->
+            val id = entry.arguments?.getLong(AppRoute.ARG_SESSION_ID) ?: 0L
+            TrackDetailScreen(sessionId = id, onBack = { rootNav.popBackStack() })
         }
     }
 }

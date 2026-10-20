@@ -21,6 +21,7 @@ import com.zouliangbu.footprint.ui.navigation.BottomTabs
 import com.zouliangbu.footprint.ui.profile.ProfileScreen
 import com.zouliangbu.footprint.ui.record.RecordScreen
 import com.zouliangbu.footprint.ui.routes.RoutesScreen
+import com.zouliangbu.footprint.ui.tracks.TrackListScreen
 import kotlinx.coroutines.flow.map
 
 /**
@@ -32,7 +33,8 @@ import kotlinx.coroutines.flow.map
 @Composable
 fun MainTabsScreen(
     tabNav: NavHostController,
-    onOpenRecord: () -> Unit
+    onOpenRecord: () -> Unit,
+    onOpenTrackDetail: (Long) -> Unit
 ) {
     // 只关心"是否在记录"：RecordingTrackState 每 2 秒发一次 Snapshot，
     // 必须 map + distinctUntilChanged，否则整个主框架（含当前 tab 页）跟着每 2 秒重组。
@@ -62,7 +64,16 @@ fun MainTabsScreen(
             composable(AppRoute.HOME) { HomeScreen() }
             composable(AppRoute.ROUTES) { RoutesScreen() }
             composable(AppRoute.GEAR) { GearScreen() }
-            composable(AppRoute.PROFILE) { ProfileScreen() }
+            composable(AppRoute.PROFILE) {
+                // 「我的记录」是下钻页，不进 tab 栈：navigate 入栈，返回回到「我的」。
+                ProfileScreen(onOpenTracks = { tabNav.navigate(AppRoute.TRACKS) })
+            }
+            composable(AppRoute.TRACKS) {
+                TrackListScreen(
+                    onBack = { tabNav.popBackStack() },
+                    onOpenDetail = onOpenTrackDetail
+                )
+            }
         }
     }
 }

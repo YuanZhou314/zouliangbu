@@ -49,11 +49,14 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 我的页（简单版）：头像/昵称/社交数字占位 + 「我的记录」本地真实统计 + 户外足迹入口占位。
- * 本期不进二级页；将来接账号系统后再扩展。
+ * 我的页（简单版）：头像/昵称/社交数字占位 + 「我的记录」本地真实统计 + 户外足迹入口。
+ * 「我的记录」卡片与「户外足迹 → 轨迹」都通向历史列表（[onOpenTracks]）。
  */
 @Composable
-fun ProfileScreen(vm: ProfileViewModel = viewModel()) {
+fun ProfileScreen(
+    onOpenTracks: () -> Unit,
+    vm: ProfileViewModel = viewModel()
+) {
     val stats by vm.stats.collectAsStateWithLifecycle()
 
     Column(
@@ -116,7 +119,7 @@ fun ProfileScreen(vm: ProfileViewModel = viewModel()) {
             shape = RoundedCornerShape(14.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-            modifier = Modifier.clickable(enabled = false) { /* 记录列表页暂未实现 */ }
+            modifier = Modifier.clickable(onClick = onOpenTracks)
         ) {
             Column(Modifier.fillMaxWidth().padding(16.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -130,7 +133,7 @@ fun ProfileScreen(vm: ProfileViewModel = viewModel()) {
                     Text("我的记录", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "记录 >",
+                        "全部 >",
                         fontSize = 12.sp,
                         color = ForestGreen
                     )
@@ -167,7 +170,7 @@ fun ProfileScreen(vm: ProfileViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    EntryCell(Icons.Filled.Map, "轨迹", "开发中")
+                    EntryCell(Icons.Filled.Map, "轨迹", null, onClick = onOpenTracks)
                     EntryCell(Icons.Filled.Interests, "兴趣点", "开发中")
                     EntryCell(Icons.Filled.CloudOff, "云端照片", "开发中")
                     EntryCell(Icons.Filled.Person, "帖子", "开发中")
@@ -198,14 +201,24 @@ private fun StatCell(value: String, label: String) {
 }
 
 @Composable
-private fun EntryCell(icon: ImageVector, label: String, note: String) {
+private fun EntryCell(
+    icon: ImageVector,
+    label: String,
+    note: String? = "开发中",
+    onClick: (() -> Unit)? = null
+) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(enabled = false) { /* 二级页暂未实现 */ }
+        modifier = Modifier.then(
+            if (onClick != null) Modifier.clickable(onClick = onClick)
+            else Modifier.clickable(enabled = false) { }
+        )
     ) {
         Icon(icon, contentDescription = label, tint = TrailOrange, modifier = Modifier.size(26.dp))
         Spacer(Modifier.height(6.dp))
         Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-        Text(note, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (note != null) {
+            Text(note, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }

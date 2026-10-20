@@ -3,19 +3,19 @@
 - 制定：2026-10-20　｜　整合人：栈师　｜　替代 v1（同日稿）
 - 依据：`APK分析报告-两步路9.2.8.md`（功能域拆解 + 4.5 MVP 切片）+ 当前代码实况（`buildNumber=3`）+ 2026-10-20 五栏框架改造决策
 - 本文与 v1 的差异：**v1 是"纯本地工具"视角；v2 融合了"工具 + 只读内容壳"的双层定位**，并把已完成项从计划里剔除（见 §1.3、§2）
-- 配套文档：`BACKEND-PLAN.md`（后端选型评估与实施方案，D4 已确认启动）
+- 配套文档：`BACKEND-PLAN.md`（后端选型评估与实施方案，D4 已确认启动）、`SERVER-ROADMAP.md`（服务端往后做什么 + 与 APK 的对接计划）
 
 ---
 
 ## 0. 一句话判断
 
-**「记录」站起来了，「看」还缺一条腿，「算」还没开始。**
+**「记录」和「看」都站起来了，「算」还没开始。**
 
-- 已有：前台服务采点、精度软过滤、Room 落库、地图蓝点跟随、五栏导航框架、四个内容页壳
-- 缺：**记录中地图不画轨迹线**、**历史列表 / 详情回看**、**GPX 导入导出**、**爬升统计**、**断点恢复**
+- 已有：前台服务采点、精度软过滤、Room 落库、实时轨迹线、历史列表、详情回看、GPX 导入导出
+- 缺：**暂停/继续**、**断点恢复**（进程被杀后的悬挂会话）、**爬升与配速统计**、**离线地图**
 
-所以 P1 的主线不是"加新功能"，而是把 **记录 → 回看 → 导出** 焊死。
-用户按下停止后看不到自己刚走过的线，这个产品就还没成立——**内容页做得再漂亮也救不回来**。
+P1 的闭环（记录 → 看线 → 列表找到 → 详情回看 → 导出/导入）已焊死（2026-10-20）。
+下一段主线是 **P2：从"能用"到"敢用"**——让轨迹在进程被杀、息屏、系统回收之后仍然不丢。
 
 ---
 
@@ -61,17 +61,17 @@
 | 双轨地图（高德 / osmdroid 按 Key 路由） | ✅ 可用（osmdroid 仅兜底，见 D1） | `ui/map/MapViewWrapper.kt` |
 | 全 App 单一定位源（共享 SharedFlow） | ✅ 可用 | `location/LocationProvider.kt` |
 | 前台服务记录（START/STOP + 通知） | ✅ 可用，**无暂停/继续** | `service/RecordingTrackService.kt` |
-| Room 持久化（sessions + points） | ✅ 可用，**v1 无 migration、exportSchema=false** | `data/db/*` |
+| Room 持久化（sessions + points） | ✅ 可用，**v2 + exportSchema=true + schemas 入库 + Migration(1,2)** | `data/db/*` |
 | 记录页（地图 + 浮层 + 摘要卡 + 权限两步） | ✅ 可用 | `ui/record/RecordScreen.kt` |
 | 距离计算（Haversine + 精度软过滤） | ✅ 可用，**只算平面距离** | `util/Distance.kt` |
 | 轨迹折线绘制 | ✅ 记录中实时 + 回看静态（高德分支；osmdroid 按 D1 不画） | `ui/map/AmapMapEngine.kt` |
-| 历史记录列表 / 详情回看 | ❌ 无（入口占位已在「我的」） | — |
-| GPX 导出 | ✅ 逻辑 + UI 入口完成（「停止记录」摘要卡 → 导出 → 系统分享），待真机验证坐标不偏 | `export/GpxWriter.kt` `GpxExporter.kt` |
-| GPX 导入 | 🟡 解析器完成 + 单测覆盖，UI 入口等 P1.3 列表落地 | `export/GpxParser.kt` |
+| 历史记录列表 / 详情回看 | ✅ 列表 + 详情（bbox 自适应、起终点 marker、长按删除） | `ui/tracks/` |
+| GPX 导出 | ✅ 逻辑 + UI 入口完成（摘要卡 + 详情页），待真机验证坐标不偏 | `export/GpxWriter.kt` `GpxExporter.kt` |
+| GPX 导入 | ✅ 解析 + SAF 选文件 + 落库 + 跳详情（只支持 trk/trkpt） | `export/GpxParser.kt` `ui/tracks/` |
 | 爬升/下降/配速统计 | ❌ 无 | — |
 | 断点恢复（进程被杀后的悬挂会话） | ❌ 无 | — |
-| 单元测试 | ✅ 首批 21 用例（坐标转换 6 / GPX 导出 8 / GPX 导入 7） | `app/src/test/` |
-| git 提交 | ⚠️ 两轮改动全部未提交（含 keystore 未入库） | — |
+| 单元测试 | ✅ 31 用例（坐标 6 / 导出 9 / 导入解析 7 / 导入转换 9） | `app/src/test/` |
+| git 提交 | ✅ 已建立回滚基线（App 五栏 / server v1 / P1.1-1.2 / P1.5-1.7 / P2.1 / P1 收尾） | — |
 
 ---
 
@@ -80,9 +80,9 @@
 | 能力域 | 两步路 9.2.8 做法 | 我们现状 | 阶段 |
 |---|---|---|---|
 | 轨迹采集 | 自研 locateprocess + 蓝牙 GPS 外设 | AMap 定位 + 前台服务 | P2 补暂停/恢复 |
-| 轨迹可视化 | 记录中实时画线 + 回放 | **仅有蓝点，无线** | **P1** |
-| 轨迹管理 | 列表/详情/筛选 | **无** | **P1** |
-| 格式互操作 | GPX/KML（GpxUtil、EventImportKmlSuccess） | **无** | **P1** |
+| 轨迹可视化 | 记录中实时画线 + 回放 | 记录中实时画线 ✅（2026-10-20）；按时间轴回放 ❌ | P1 收尾 |
+| 轨迹管理 | 列表/详情/筛选 | 列表 + 详情 ✅（2026-10-20）；搜索/筛选 ❌ | P2 之后 |
+| 格式互操作 | GPX/KML（GpxUtil、EventImportKmlSuccess） | GPX 导出 ✅、导入解析器 ✅（无 UI 入口）；KML 不做（§6） | P1 收尾 |
 | 数据核算 | 距离/爬升/下降/配速 + DEM 校正 | 只有平面距离 | P3 |
 | 离线地图 | 高德离线 + regions.txt 省市目录 | osmdroid 在线瓦片缓存 | P4 |
 | 户外安全 | rescue 集群、安全守护、海拔表 | 无 | P5 |
@@ -117,12 +117,12 @@
 |---|---|---|---|---|
 | ✅1.1 | **地图引擎抽象**（必须先做，2026-10-20 完成） | `ui/map/MapEngine` + `MapPoint` + `AmapMapEngine`：`setTrack` / `setEndpoints` / `zoomToTrack` / `moveTo` / `followTo`。Osm 不实现（D1） | 上层业务代码不再出现 `aMap` / `LatLng` / `Polyline` 类型 ✅ | 0.5d |
 | ✅1.2 | **记录中实时画线**（2026-10-20 完成） | `AmapMapEngine` 复用 Polyline 对象换点集；`RecordingTrackState.Snapshot.lastPoint` 推增量；`RecordViewModel.track` 从 DB 补齐 + 去重；附带相机跟随（用户拖图即停） | 走动时线跟着长 ✅；1 Hz 量级 O(n) 刷新，5000 点未实测 | 1.5d |
-| 1.3 | **历史轨迹列表** | `TrackSessionDao.observeCompleted()`；`ui/tracks/TrackListScreen.kt`；从「我的 → 我的记录」进入 | 停止记录后立刻出现在列表；空态有引导文案 | 1d |
-| 1.4 | **轨迹详情回看** | `ui/tracks/TrackDetailScreen.kt`：只读地图 + 整条轨迹 + 起终点 marker + 统计卡 | 点列表项进详情，地图自动缩放到轨迹 bbox | 1.5d |
+| ✅1.3 | **历史轨迹列表**（2026-10-20 完成） | `TrackSessionDao.observeCompleted()`（带 pointCount 子查询）；`ui/tracks/TrackListScreen.kt`；从「我的 → 我的记录」进入；长按删除 | 停止记录后立刻出现在列表 ✅；空态有引导文案 ✅ | 1d |
+| ✅1.4 | **轨迹详情回看**（2026-10-20 完成） | `ui/tracks/TrackDetailScreen.kt`：只读地图 + 整条轨迹 + 起终点 marker + 统计卡（距离/时长/均速/点数）+ 导出 | 点列表项进详情，地图自动缩放到轨迹 bbox ✅ | 1.5d |
 | ✅1.5 | **坐标转换工具**（2026-10-20 完成） | `util/CoordTransform.kt`：`gcj02ToWgs84`（迭代逼近）/ `wgs84ToGcj02` | 单测锁住境外不偏、境内量级 300–800 m、往返残差 < 0.3 m；与在线工具逐点比对仍待真机 | 0.5d |
 | ✅1.6 | **GPX 1.1 导出**（2026-10-20 完成） | `export/GpxWriter.kt`（手写 XML）+ `GpxExporter.kt`（cacheDir → FileProvider → 系统分享）；摘要卡「导出 GPX」按钮 | 产出可被标准 DOM 解析、坐标确为 WGS-84；**外部 App 打开不偏待真机验证** | 1d |
-| 🟡1.7 | **GPX 导入**（解析器完成，UI 待做） | `export/GpxParser.kt`：SAX（不用 android.util.Xml，否则 JVM 单测跑不了）；导入转 GCJ-02 | 解析器 7 用例全绿；「导入并看到详情」等 P1.3/P1.4 落地后再接 | 1d |
-| 1.8 | 停止后跳详情 | `RecordScreen` 摘要卡加「查看轨迹」按钮 | 停止 → 摘要 → 一键进详情 | 0.3d |
+| ✅1.7 | **GPX 导入**（2026-10-20 完成） | `export/GpxParser.kt`：SAX（不用 android.util.Xml，否则 JVM 单测跑不了）；`export/GpxImport.kt` 纯转换；SAF 选文件（mime `*/*`）；落库转 GCJ-02 | 解析器 7 用例 + 转换 9 用例全绿 ✅；导入后直接跳详情 ✅ | 1d |
+| ✅1.8 | 停止后跳详情（2026-10-20 完成） | `RecordScreen` 摘要卡加「查看轨迹」按钮 | 停止 → 摘要 → 一键进详情 ✅ | 0.3d |
 
 **风险与坑**
 
@@ -140,7 +140,7 @@
 
 | # | 任务 | 主要改动 | 验收标准 |
 |---|---|---|---|
-| 2.1 | **Room 迁移策略**（越早越省事） | `exportSchema = true` + `room.schemaLocation`；`app/schemas/` 入库；正式写 `Migration` | 以后改表不再需要卸载重装 |
+| ✅2.1 | **Room 迁移策略**（2026-10-20 完成，越早越省事） | `exportSchema = true` + `room.schemaLocation`；`app/schemas/{1,2}.json` 入库；`MIGRATION_1_2`（加 `name` 列） | 以后改表不再需要卸载重装 ✅；迁移尚未在真机验证 |
 
 > **2.1 白话说明（为什么必须现在做）**
 > Room 数据库就是手机里的几张表（会话表、轨迹点表）。你现在要加字段（比如 `ascentMeters` 爬升），
@@ -237,6 +237,9 @@
 **关键约束**：App 侧只改 `FootprintApp` 三个 lazy 单例的实现类（Mock → Remote），UI/ViewModel 零改动；
 Mock 实现保留作为离线 fallback，不要删。
 
+> **服务端自身的 S4–S8 排期、接口演进规则、离线降级策略、明文 HTTP 配置** —— 全部见 `SERVER-ROADMAP.md`。
+> 一句话结论：**P1–P5 都不需要服务端**，服务端不在 App 的关键路径上，别让它和 P1 抢时间。
+
 ---
 
 ### P7 · 可选扩展（有真实需求再做）
@@ -293,19 +296,21 @@ Mock 实现保留作为离线 fallback，不要删。
 
 **A 线 · App 核心闭环（P1，主线，不可跳过）**
 
-1. **git 提交**当前两轮改动（先留回滚点）+ 更新 README 功能范围（10 分钟）
-2. 抽 `ui/map/MapEngine` 接口（0.5d）—— 越早抽越便宜
-3. `AmapMapView` 加 Polyline（P1.2）——**当下投入产出比最高的一件事**
-4. `TrackSessionDao.observeCompleted()` + `TrackListScreen`（P1.3），把「我的 → 我的记录」接上
-5. 详情页 + `CoordTransform` + `GpxWriter`（P1.4 / 1.5 / 1.6）
-6. GPX 导入 + 停止后跳详情（P1.7 / 1.8）
+1. ✅ **git 提交**回滚基线（App 五栏 / server v1 / P1.1-1.2 / P1.5-1.7）—— README 按用户要求暂不改
+2. ✅ 抽 `ui/map/MapEngine` 接口 —— 已落地 `MapPoint` / `MapEngine` / `AmapMapEngine`
+3. ✅ `AmapMapView` 加 Polyline（P1.2）+ 相机跟随（拖图即停）
+4. ✅ `TrackSessionDao.observeCompleted()` + `TrackListScreen`（P1.3），「我的 → 我的记录」已接通
+5. ✅ 详情页（P1.4）+ `CoordTransform` + `GpxWriter`
+6. ✅ GPX 导入 UI 入口 + 停止后跳详情（P1.7 / P1.8）
+
+> **P1 八项全部完成（2026-10-20）**，A 线转入 P2：2.2 悬挂会话恢复 → 2.3 Service/UI 一致 → 2.4 暂停继续。
 
 **B 线 · 后端（P6，已确认启动，可与 A 线并行）**
 
 1. ✅ `zouliangbu-server` 脚手架 → `/api/v1/healthz` 跑通（S1）
 2. ✅ Flyway 建 4 张表 + 种子数据（文案直接复用 `MockData.kt`）（S2）
 3. ✅ 三个只读接口 + 统一响应 + cursor 分页 + 12 个回归测试（S3）
-4. ⏭ App 侧 Retrofit + `Remote*Repository`，只改 `FootprintApp` 三行（S4）
+4. ⏭ App 侧 Retrofit + `Remote*Repository`，只改 `FootprintApp` 三行（S4）—— **排在 A 线 P1 之后**，详见 `SERVER-ROADMAP.md` §3
 5. ⏭ HTTPS + 备份（S5）
 
 > 两条线互不阻塞：B 线改的是"数据从哪来"，A 线改的是"轨迹怎么看"。**但 A 线优先级更高**——
