@@ -1,4 +1,4 @@
-# CLAUDE.md — 走路簿 (zouliangbu) 项目速记
+# CLAUDE.md — 走两步 (zouliangbu) 项目速记
 
 > 给 Claude Code 看的项目速记。`README.md` / `LOCAL_ENV.md` 是给人和复现用的——这个文件
 > **只**记 Claude 下次进来时最可能踩坑的几个点，不重复它们的内容。
@@ -18,6 +18,27 @@
 - 定位 SDK（`location/LocationProvider.kt` 用 `AMapLocationClient`）**不依赖 Key**，独立可用。
 - 当前实际跑的是 osmdroid 分支（高德 Key 还在申请中）。
 
+## UI 导航框架（2026-10-20 会话产物，硬约束）
+- **双层 NavHost**：外层 `tabs / record`（`ui/AppRoot.kt`），内层 `home/routes/gear/profile`
+  （`ui/tabs/MainTabsScreen.kt`）。record 是外层独立 destination → 天然全屏无底栏，
+  不要改成"单 NavHost + 条件 bottomBar"（innerPadding 跳变会让地图 resize）。
+- **navigation-compose 锁 2.7.7，禁止升 2.8+**：其传递依赖把 Compose 抬到 1.7.x，
+  与 Kotlin 1.9.24 / compiler 1.5.14 冲突。改完依赖跑
+  `./gradlew :app:dependencies --configuration debugRuntimeClasspath` 确认 compose 全 1.6.8。
+- **底栏自绘**（`ui/components/AppBottomBar.kt`）：父 Box 高 84dp（60 底栏 + 24 凸起），
+  中间圆钮 64dp 必须在父边界内，**负 offset 出界会裁掉点击区**。
+  `navigationBarsPadding()` 放在 Box 上（背景铺到导航栏后），tab 页不要再加（防双重 inset）。
+- **记录中状态订阅**：`RecordingTrackState` 每 2s 发 Snapshot，底栏只订阅
+  `map { it != null }.distinctUntilChanged()`，否则主框架每 2s 整体重组。
+- **Mock 替换点**：内容数据全收在 `FootprintApp.feedRepository / routeRepository /
+  gearRepository`（lazy），接后台只换实现类（Mock→Remote Retrofit），UI 零改动。
+- **城市定位**：共享 client `isNeedAddress=true` + `CityProvider`（first{} 取一帧即退订 +
+  SharedPreferences 缓存）。不新建第二个 AMapLocationClient。
+- 图标坑：material-icons-extended **没有 Tent**（帐篷用 Cabin）；返回键用
+  `Icons.AutoMirrored.Filled.ArrowBack`。
+- 记录中从记录页返回：只 popBackStack，Service 不停；重进记录页浮层数据自动恢复
+  （RecordingTrackState 是进程内单例）。
+
 ## 不要踩的坑（来自本会话真实经验）
 1. **AMap 10.x 已内嵌 location 类**：不要单独加 `com.amap.api:location` 依赖，会
    `Duplicate class`。`app/build.gradle.kts` 只声明 `com.amap.api:3dmap`。
@@ -31,6 +52,28 @@
 5. **`permissionLauncher` 不能在自己的 callback 里再 `launch` 自己**：会触发
    "未初始化前引用"编译错误。需要拆两个 launcher（见 `MainScreen.kt`）。
 
+## 统一定位架构（重要，本次会话产物）
+**全 App 只有一个 AMapLocationClient**，通过 `LocationProvider` 的共享 `SharedFlow` 分发：
+- `FootprintApp.locationProvider` 是全局唯一实例（by lazy）
+- `LocationProvider.location` 用 `shareIn(WhileSubscribed(5000))` + `replay=1`，
+  地图蓝点、自绘定位按钮、记录 Service 都订阅这一个流
+- 地图**不自己发起 AMap 定位**：`AmapMapView` 把高德内置定位按钮关掉
+  （`setMyLocationButtonEnabled(false)`），改用 `LocationSource` 桥接共享流；定位按钮
+  在 Compose 里自绘（右下角，位置可控，解决 OPPO 上内置按钮偏高问题）
+- 首点跟随：`AmapMapView` 拿到第一个定位点后 `animateCamera` 到真实位置，
+  避免初始默认中心（AMap 默认在非用户位置）导致 WiFi 下点定位跳变
+
+## 版本自增（构建产物）
+- `app/build.gradle.kts` 每次 `assemble` 读 `version.properties` 的 `buildNumber` 自增 +1，
+  versionName = `0.1.0.${buildNumber}`（`0.1.0.000001`...），versionCode = `10000 + buildNumber`
+- `version.properties` 已 gitignore，每次打包自动 +1；改代码重打包时新版本号覆盖安装必通过
+- 坑：改完源码要确保重打包生效（CLAUDE.md 第 10 条），但**版本号机制保证每次 assemble 都是新包**
+
+## 精度过滤（记录距离）
+- accuracy <= 30 m：可信点，正常入库 + 记距离
+- accuracy > 30 m：低质量点**仍落库**（轨迹连续）但**不计距离**（避免抖动/漂移算进去）
+- 不再"直接丢点"，避免真机上移动中距离不涨的现象
+
 ## 模拟器与构建（装机实测后）
 6. **AMap SDK 隐私合规需要在两个类上分别调用**（**关键坑，必读**）：
    - `MapsInitializer.updatePrivacyShow/Agree` → 高德地图 SDK
@@ -42,9 +85,13 @@
    （screencap 永远返回同一张纯黑 PNG，screenrecord 0 字节），
    **用 android-33 的 `system-images;android-33;default;arm64-v8a`** 替代：
    纯 AOSP、无 Google 服务、最轻、framebuffer 正常输出。
-   当前 `app/build.gradle.kts` `compileSdk = 33`、`targetSdk = 33`。
-8. **compileSdk=33 下不能用 `Build.VERSION_CODES.UPSIDE_DOWN_CAKE`**（API 34 常量
-   不存在于 33 jar）。`RecordingTrackService.startForegroundCompat` 改用数字字面量 `34`。
+   当前 `app/build.gradle.kts` `compileSdk = 34`、`targetSdk = 33`（见第 8 条，compileSdk 不能降）。
+8. **compileSdk 不要跟着模拟器 API 降级**。`compileSdk` 只决定编译期可用 API，与运行设备/模拟器的
+   API 级别无关。之前为跑 android-33 模拟器把 `compileSdk` 降到 33，结果 **Room 2.6.1 的传递依赖
+   （`androidx.sqlite:2.4.0`、`annotation-experimental:1.4.0`）AAR metadata 要求 API 34**，构建直接
+   失败。正确组合：`compileSdk = 34` + `targetSdk = 33`（AGP 明确支持二者分离）。
+   反过来说，compileSdk=34 后代码里可以用 `Build.VERSION_CODES.UPSIDE_DOWN_CAKE` 常量
+   （`RecordingTrackService.startForegroundCompat` 里的 `34` 字面量可以换回去，但非必要）。
 9. **`Modifier.navigationBarsPadding()` 是必须的**：`enableEdgeToEdge()` 让
    Compose 画到 system bar 后面，没这个 padding 底部按钮会被 nav bar 盖住一半，
    `uiautomator dump` 的 app bounds 是 `0..2072`（不含 nav bar），但视觉上按钮
@@ -67,14 +114,35 @@
 
 | 文件 | 作用 |
 |---|---|
-| `app/build.gradle.kts` | 依赖：AMap 10.0.600 + osmdroid 6.1.20 |
+| `app/build.gradle.kts` | 依赖：AMap 10.0.600 + osmdroid 6.1.20 + navigation-compose 2.7.7；版本自增（version.properties） |
+| `ui/AppRoot.kt` | 外层 NavHost（tabs / record） |
+| `ui/tabs/MainTabsScreen.kt` | 主框架：Scaffold + 内层四 tab NavHost + 底栏 |
+| `ui/components/AppBottomBar.kt` | 五槽底栏 + 凸起出发圆钮 + 记录中红点 |
+| `ui/home` `ui/routes` `ui/gear` `ui/profile` | 四个内容 tab（mock 数据 + Repository 接口） |
+| `ui/record/RecordScreen.kt` | 出发页（原 MainScreen 全部能力 + 返回键），权限两步逻辑在此 |
 | `data/AmapKey.kt` | Key 读取 + 占位符检测 |
-| `location/LocationProvider.kt` | `AMapLocationClient` Flow 封装（GCJ-02 输出） |
-| `service/RecordingTrackService.kt` | 前台服务：定位 → 过滤 → 累计 → 落库 |
-| `ui/MainScreen.kt` | 全屏地图 + 底部按钮 + 浮层 + 摘要卡 + 权限两步 |
+| `location/LocationProvider.kt` | **共享** `AMapLocationClient` Flow 封装（GCJ-02 输出），全 App 唯一 |
+| `location/CityProvider.kt` | 从共享定位流取城市名（first{} + 缓存），首页「同城」用 |
+| `service/RecordingTrackService.kt` | 前台服务：订阅共享定位流 → 过滤 → 累计 → 落库 |
 | `ui/map/MapViewWrapper.kt` | 地图路由入口 |
-| `ui/map/AmapMapView.kt` | 高德分支 |
-| `ui/map/OsmMapView.kt` | osmdroid 分支 |
+| `ui/map/AmapMapView.kt` | 高德分支：LocationSource 桥接共享定位 + 自绘定位按钮 + 首点跟随 |
+| `ui/map/OsmMapView.kt` | osmdroid 分支（仅无 Key 时） |
+| `zouliangbu-server/` | 内容服务端（Java 17 + Spring Boot 4.1.1 + MyBatis-Plus + Flyway） |
+
+## 服务端硬约束（2026-10-20 v1）
+
+- **Spring Boot 4 ≠ 3，不要照 Boot 3 教程写**：
+  `spring-boot-starter-web` → **`-webmvc`**；Flyway 必须显式引 **`spring-boot-starter-flyway`**；
+  测试注解在 **`org.springframework.boot.webmvc.test.autoconfigure`**；`@MockBean` → **`@MockitoBean`**。
+- **本机起服务必须带 `--server.port=8080`**：环境变量 `SERVER__PORT=57182` 会被 Spring 宽松绑定
+  成 `server.port`，而该端口被 IDE 占用，不加参数会 `Port already in use` 起不来。
+- **打包前先停 java 进程**：Windows 下 jar 被占用会报 `Unable to rename ... to .jar.original`。
+- **`RouteSection.subtitle` 必须返回空串，不能返回 null**：App 侧是非空 `String`，
+  null 会让 kotlinx.serialization 直接抛异常。
+- **轨迹数据永不上云**：服务端只有内容表（feed_post / route_section / route / gear_category）。
+- 响应统一 `{code,msg,data}`；客户端传错走 4xx（code 1001/1004），服务端故障走 500（code 5000）。
+- 改表：只新增 `V{n}__xxx.sql`，**不要改已执行的 V1/V2**。
+- 接口字段名必须与 App 的 `data/model/*.kt` 逐字段一致——这样换 Remote 实现时 UI/ViewModel 零改动。
 
 ## 构建 & 调试
 

@@ -1,0 +1,211 @@
+package com.zouliangbu.footprint.ui.profile
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Hiking
+import androidx.compose.material.icons.filled.Interests
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zouliangbu.footprint.ui.theme.ForestGreen
+import com.zouliangbu.footprint.ui.theme.TrailOrange
+import com.zouliangbu.footprint.util.TimeFmt
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/**
+ * 我的页（简单版）：头像/昵称/社交数字占位 + 「我的记录」本地真实统计 + 户外足迹入口占位。
+ * 本期不进二级页；将来接账号系统后再扩展。
+ */
+@Composable
+fun ProfileScreen(vm: ProfileViewModel = viewModel()) {
+    val stats by vm.stats.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        // ===== 用户信息头（占位） =====
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = "头像",
+                    tint = ForestGreen,
+                    modifier = Modifier.size(32.dp)
+                )
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text("徒步者", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(
+                    "登录 / 账号功能开发中",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // ===== 社交数字占位 =====
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatCell("0", "互相关注")
+                StatCell("0", "队伍")
+                StatCell("0", "关注")
+                StatCell("0", "粉丝")
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // ===== 我的记录（本地 Room 真实数据） =====
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+            modifier = Modifier.clickable(enabled = false) { /* 记录列表页暂未实现 */ }
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Hiking,
+                        contentDescription = null,
+                        tint = ForestGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("我的记录", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "记录 >",
+                        fontSize = 12.sp,
+                        color = ForestGreen
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    StatCell("${stats.count}", "记录次数")
+                    StatCell(TimeFmt.distance(stats.totalMeters.toFloat()), "累计距离")
+                    StatCell(
+                        stats.lastStartTime?.let {
+                            SimpleDateFormat("MM-dd", Locale.getDefault()).format(Date(it))
+                        } ?: "—",
+                        "最近记录"
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        // ===== 户外足迹（入口占位） =====
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Text("户外足迹", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(14.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    EntryCell(Icons.Filled.Map, "轨迹", "开发中")
+                    EntryCell(Icons.Filled.Interests, "兴趣点", "开发中")
+                    EntryCell(Icons.Filled.CloudOff, "云端照片", "开发中")
+                    EntryCell(Icons.Filled.Person, "帖子", "开发中")
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "离线地图 / 排行榜 / 福利等更多功能开发中",
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+}
+
+@Composable
+private fun StatCell(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(2.dp))
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun EntryCell(icon: ImageVector, label: String, note: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(enabled = false) { /* 二级页暂未实现 */ }
+    ) {
+        Icon(icon, contentDescription = label, tint = TrailOrange, modifier = Modifier.size(26.dp))
+        Spacer(Modifier.height(6.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+        Text(note, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}

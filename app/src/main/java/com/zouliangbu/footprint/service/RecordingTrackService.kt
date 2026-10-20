@@ -18,7 +18,6 @@ import com.zouliangbu.footprint.MainActivity
 import com.zouliangbu.footprint.R
 import com.zouliangbu.footprint.data.RecordingTrackState
 import com.zouliangbu.footprint.data.db.TrackPoint
-import com.zouliangbu.footprint.location.LocationProvider
 import com.zouliangbu.footprint.util.Distance
 import com.zouliangbu.footprint.util.TimeFmt
 import kotlinx.coroutines.CoroutineScope
@@ -39,7 +38,7 @@ import kotlinx.coroutines.withContext
  *   - START_STICKY：被系统杀掉后会重启动，但没有 sessionId 会进入空跑（只发一个空通知）
  *
  * 数据过滤：
- *   - accuracy > 30 m 的点丢弃
+ *   - accuracy <= 30 m 的点计入距离；accuracy > 30 m 的点仍落库（保持轨迹连续）但**不计距离**
  *   - 与上一个点间隔 < 1 s 的点丢弃
  *   - 单段增量 > 500 m 视为漂移，跳过该段距离
  */
@@ -68,7 +67,6 @@ class RecordingTrackService : Service() {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private lateinit var app: FootprintApp
-    private lateinit var provider: LocationProvider
 
     private var sessionId: Long = -1L
     private var startElapsedRealtime: Long = 0L
@@ -82,7 +80,6 @@ class RecordingTrackService : Service() {
     override fun onCreate() {
         super.onCreate()
         app = application as FootprintApp
-        provider = LocationProvider(this)
         ensureChannel()
     }
 
@@ -122,13 +119,17 @@ class RecordingTrackService : Service() {
         publishSnapshot()
 
         collectJob = scope.launch {
-            provider.locationUpdates().collect { loc ->
-                // 1. 精度过滤：> 30 m 视为低质量点
-                if (loc.accuracy > 30f) return@collect
+            app.locationProvider.location.collect { loc ->
+                // 1. 精度过滤：
+                //    - accuracy <= 30 m：可信点，正常入库 + 记距离
+                //    - accuracy > 30 m：低质量点（室内/隧道/遮挡），仍落库（保证轨迹连续），
+                //      但**不计入距离**，避免把抖动/漂移算进去。
+                //    用准确性作为距离的可信度，而不是直接丢弃导致记录"看起来卡住"。
+                val accurate = loc.accuracy <= 30f
 
                 val nowMs = System.currentTimeMillis()
 
-                // 2. 时间间隔过滤：< 1 s 的连续点丢弃
+                // 2. 时间间隔过滤：< 1 s 的连续点丢弃（防止静止时连续打点刷距离）
                 val prev = lastPoint
                 if (prev != null && (nowMs - prev.timestamp) < 1_000L) return@collect
 
@@ -142,7 +143,7 @@ class RecordingTrackService : Service() {
                 )
 
                 // 3. 距离增量（仅在有上一条点时计算）
-                if (prev != null) {
+                if (prev != null && accurate) {
                     val inc = Distance.haversineMeters(
                         prev.lat, prev.lng,
                         newPoint.lat, newPoint.lng
@@ -153,7 +154,7 @@ class RecordingTrackService : Service() {
                     }
                 }
 
-                // 4. 落库
+                // 4. 落库（低质量点也落库，保持轨迹连续；准确性已存进字段）
                 app.repository.appendPoint(newPoint)
                 lastPoint = newPoint
                 pointCount += 1

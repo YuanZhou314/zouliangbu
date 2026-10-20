@@ -7,21 +7,33 @@ import com.amap.api.location.AMapLocation
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.shareIn
 
 /**
- * AMap 高精度定位的 Flow 封装。
+ * AMap 高精度定位的共享 Flow 封装（GCJ-02 输出）。
  *
- * 输出是 AMapLocation（已经做了 GCJ-02 偏移），调用方直接用 lat/lng 即可，
- * 距离累加不会出现 WGS-84 ↔ GCJ-02 混用导致的系统偏差。
+ * 设计目标：**全 App 只跑一个 AMapLocationClient**。
+ * 地图"我的位置"蓝点、自绘定位按钮、轨迹记录 Service 都订阅同一个共享流，
+ * 避免多个 AMapLocationClient 同时请求互相抢定位资源。
+ *
+ * 通过 `shareIn` 把冷流（callbackFlow）转成共享热流：上游只在最后一个订阅者
+ * 退订后 5s 才停止，记录中 Service 一直订阅，上游不会断。
  *
  * 错误码非 0（无定位、权限拒绝等）的点会被丢弃，Flow 不发射。
  */
 class LocationProvider(context: Context) {
 
     private val appContext: Context = context.applicationContext
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     init {
         // 防御：即使 FootprintApp.onCreate 跑过，这里再确认一次隐私状态。
@@ -34,8 +46,24 @@ class LocationProvider(context: Context) {
         }.onFailure { Log.w("LocationProvider", "privacy update failed", it) }
     }
 
+    /** 最近一次成功定位（自绘定位按钮 / 首点跟随用）。线程安全。 */
+    @Volatile
+    var lastLocation: AMapLocation? = null
+        private set
+
+    /** 共享定位流：地图蓝点 + 记录 Service 共用同一个上游 AMapLocationClient。 */
+    val location: SharedFlow<AMapLocation> by lazy {
+        locationUpdatesInternal()
+            .onEach { lastLocation = it }
+            .shareIn(
+                scope = scope,
+                started = SharingStarted.WhileSubscribed(5_000),
+                replay = 1 // 新订阅者（地图 activate）立即拿到最近一次定位
+            )
+    }
+
     @SuppressLint("MissingPermission")
-    fun locationUpdates(intervalMs: Long = 2000L): Flow<AMapLocation> = callbackFlow {
+    private fun locationUpdatesInternal(): Flow<AMapLocation> = callbackFlow {
         val client = try {
             AMapLocationClient(appContext)
         } catch (t: Throwable) {
@@ -48,10 +76,13 @@ class LocationProvider(context: Context) {
 
         val option = AMapLocationClientOption().apply {
             locationMode = AMapLocationClientOption.AMapLocationMode.Hight_Accuracy
-            interval = intervalMs
+            interval = 2_000L
             isGpsFirst = true
             isOnceLocation = false
-            isNeedAddress = false
+            // 首页「同城」需要城市名：开启逆地理编码后 AMapLocation.city 才有值。
+            // 坐标输出仍是 GCJ-02，不受影响；记录 Service 只读 lat/lng/accuracy，
+            // 多余字段无副作用。无网时 city 为空但坐标仍正常回调。
+            isNeedAddress = true
         }
         client.setLocationOption(option)
 

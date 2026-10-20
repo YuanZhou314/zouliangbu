@@ -4,7 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import com.zouliangbu.footprint.ui.MainScreen
+import com.zouliangbu.footprint.ui.AppRoot
 import com.zouliangbu.footprint.ui.theme.FootprintTheme
 
 class MainActivity : ComponentActivity() {
@@ -13,7 +13,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             FootprintTheme {
-                MainScreen()
+                AppRoot()
             }
         }
     }

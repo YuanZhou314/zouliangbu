@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">走路簿</string>
+    <string name="app_name">走两步</string>
 
     <!--
         高德 AMap Android SDK API Key。
@@ -14,5 +14,5 @@
           4. 把高德下发的 32 字符 Key 替换下面的 REPLACE_WITH_YOUR_AMAP_KEY。
         没有 Key 时 App 仍可编译和安装，地图区显示「请配置高德 Key」占位。
     -->
-    <string name="amap_api_key">REPLACE_WITH_YOUR_AMAP_KEY</string>
+    <string name="amap_api_key">4e4785dbccc99da83531f51e643a63ab</string>
 </resources>

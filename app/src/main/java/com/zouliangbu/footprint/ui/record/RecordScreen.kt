@@ -1,23 +1,32 @@
-package com.zouliangbu.footprint.ui
+package com.zouliangbu.footprint.ui.record
 
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -31,14 +40,13 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -56,8 +64,22 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+/**
+ * 出发页（全屏记录页，无底栏）。
+ *
+ * 由原 MainScreen 整体迁移而来，能力不变：全屏地图 + 权限两步申请 + 记录浮层
+ * + 开始/停止 + 停止后摘要卡。新增：左上角返回键（onBack 只退导航栈，
+ * 记录 Service / 通知不受影响；RecordingTrackState 是进程内单例，
+ * 重新进入本页浮层数据自动恢复）。
+ *
+ * 权限分两步：拆成两个 launcher，因为一个 launcher 不能在自己的 callback 里再 launch 自身
+ * （Kotlin 的 val 必须在初始化后才能引用）。Android 10+ 强制后台定位必须单独请求。
+ */
 @Composable
-fun MainScreen(vm: MainViewModel = viewModel()) {
+fun RecordScreen(
+    onBack: () -> Unit,
+    vm: RecordViewModel = viewModel()
+) {
     val context = LocalContext.current
     val snapshot by vm.recording.collectAsStateWithLifecycle()
     val sessions by vm.sessions.collectAsStateWithLifecycle()
@@ -66,12 +88,7 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     // 摘要对话框：service stop 后展示
     var summaryFor by remember { mutableStateOf<Long?>(null) }
 
-    // 权限分两步：拆成两个 launcher，因为一个 launcher 不能在自己的 callback 里再 launch 自身
-    // （Kotlin 的 val 必须在初始化后才能引用）。Android 10+ 强制后台定位必须单独请求。
-    var pendingStep by remember { mutableStateOf<Int?>(null) }
-
     fun proceedToStart() {
-        pendingStep = null
         vm.startSession { sid ->
             context.startForegroundService(
                 RecordingTrackService.startIntent(context, sid)
@@ -92,7 +109,6 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     ) { grants ->
         val fineGranted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
         if (!fineGranted) {
-            pendingStep = null
             return@rememberLauncherForActivityResult
         }
         val bgPerms = backgroundPermissions()
@@ -102,7 +118,6 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
         if (bgAlreadyGranted) {
             proceedToStart()
         } else {
-            pendingStep = 2
             backgroundPermissionLauncher.launch(bgPerms)
         }
     }
@@ -110,18 +125,38 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
     Box(Modifier.fillMaxSize()) {
         MapViewWrapper(Modifier.fillMaxSize())
 
+        // 左上角返回键（地图画到状态栏后面，需要 statusBarsPadding）
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(12.dp)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Color(0x99000000))
+                .clickable(onClick = onBack),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "返回",
+                tint = Color.White
+            )
+        }
+
         // 记录中浮层：顶部居中
         if (snapshot != null) {
             val s = snapshot!!
             Card(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 48.dp, start = 16.dp, end = 16.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars)
+                    .padding(top = 12.dp, start = 64.dp, end = 64.dp)
                     .fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
                 colors = CardDefaults.cardColors(containerColor = Color(0xCC263238))
             ) {
-                Column(Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Column(Modifier.padding(horizontal = 20.dp, vertical = 14.dp)) {
                     Text("距离", color = OnDarkMuted, fontSize = 12.sp)
                     Text(
                         TimeFmt.distance(s.distanceMeters),
@@ -129,12 +164,11 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         fontSize = 28.sp,
                         fontWeight = FontWeight.Bold
                     )
-                    Spacer(Modifier.height(8.dp))
-                    Text("时长", color = OnDarkMuted, fontSize = 12.sp)
+                    Spacer(Modifier.height(6.dp))
                     Text(
-                        TimeFmt.elapsed(s.elapsedMs),
+                        "时长 " + TimeFmt.elapsed(s.elapsedMs),
                         color = Color.White,
-                        fontSize = 20.sp
+                        fontSize = 16.sp
                     )
                 }
             }
@@ -170,11 +204,9 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                                 if (bgGranted) {
                                     proceedToStart()
                                 } else {
-                                    pendingStep = 2
                                     backgroundPermissionLauncher.launch(bgPerms)
                                 }
                             } else {
-                                pendingStep = 1
                                 foregroundPermissionLauncher.launch(foregroundPermissions())
                             }
                         },
@@ -225,14 +257,14 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
                         val durationMs = (session.endTime ?: System.currentTimeMillis()) - session.startTime
                         Text("时长：${TimeFmt.elapsed(durationMs)}")
                         Text(
-                                "开始：${
-                                    SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
-                                        .format(Date(session.startTime))
-                                }"
-                            )
+                            "开始：${
+                                SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())
+                                    .format(Date(session.startTime))
+                            }"
+                        )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "（点 ${sid} 已保存到本地数据库）",
+                            "（已保存到本地数据库）",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             fontSize = 12.sp
                         )
@@ -244,9 +276,6 @@ fun MainScreen(vm: MainViewModel = viewModel()) {
             )
         }
     }
-
-    // 兜底：如果服务进程被杀后重启，recording 状态可能 stale；这里不做额外恢复处理。
-    LaunchedEffect(Unit) { /* placeholder */ }
 }
 
 /**

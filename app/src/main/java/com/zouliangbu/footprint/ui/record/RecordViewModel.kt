@@ -1,4 +1,4 @@
-package com.zouliangbu.footprint.ui
+package com.zouliangbu.footprint.ui.record
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -11,7 +11,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-class MainViewModel(application: Application) : AndroidViewModel(application) {
+/**
+ * 记录页（出发）ViewModel。
+ *
+ * - recording：Service 通过 RecordingTrackState 推送的实时快照
+ * - sessions：Room 会话列表（停止后摘要卡从这取最终数据）
+ */
+class RecordViewModel(application: Application) : AndroidViewModel(application) {
 
     private val repo = (application as FootprintApp).repository
 
@@ -27,10 +33,5 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val id = repo.startSession(System.currentTimeMillis())
             onReady(id)
         }
-    }
-
-    /** 仅供将来扩展；当前 MainActivity 直接发 STOP intent 给 service。 */
-    fun stopSession() {
-        viewModelScope.launch { /* no-op：service 收到 STOP intent 后会自己落库 */ }
     }
 }

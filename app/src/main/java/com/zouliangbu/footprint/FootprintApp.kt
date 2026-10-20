@@ -4,7 +4,15 @@ import android.app.Application
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.maps.MapsInitializer
 import com.zouliangbu.footprint.data.db.AppDatabase
+import com.zouliangbu.footprint.data.mock.MockFeedRepository
+import com.zouliangbu.footprint.data.mock.MockGearRepository
+import com.zouliangbu.footprint.data.mock.MockRouteRepository
+import com.zouliangbu.footprint.data.repo.FeedRepository
+import com.zouliangbu.footprint.data.repo.GearRepository
+import com.zouliangbu.footprint.data.repo.RouteRepository
 import com.zouliangbu.footprint.data.repo.TrackRepository
+import com.zouliangbu.footprint.location.CityProvider
+import com.zouliangbu.footprint.location.LocationProvider
 import org.osmdroid.config.Configuration
 import java.io.File
 
@@ -14,6 +22,17 @@ class FootprintApp : Application() {
     val repository: TrackRepository by lazy {
         TrackRepository(database.sessionDao(), database.pointDao())
     }
+
+    /** 全 App 共享的唯一定位提供者：地图蓝点、定位按钮、记录 Service 都从这里订阅。 */
+    val locationProvider: LocationProvider by lazy { LocationProvider(this) }
+
+    /** 城市提供者：从共享定位流取城市名（首页「同城」用），带缓存。 */
+    val cityProvider: CityProvider by lazy { CityProvider(this, locationProvider) }
+
+    // ====== 内容数据仓库（本期 Mock；接后台时只改这里的实现类，UI 零改动） ======
+    val feedRepository: FeedRepository by lazy { MockFeedRepository() }
+    val routeRepository: RouteRepository by lazy { MockRouteRepository() }
+    val gearRepository: GearRepository by lazy { MockGearRepository() }
 
     override fun onCreate() {
         super.onCreate()

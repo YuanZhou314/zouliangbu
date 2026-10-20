@@ -1,19 +1,55 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+// 版本自增：读 version.properties 的 buildNumber，打包后 +1 回写。
+// 每次打包 versionName = 0.1.0.<buildNumber>（0.1.0.000001、0.1.0.000002...），
+// versionCode = 10000 + buildNumber，保证覆盖安装时新包版本更高。
+val versionPropsFile = rootProject.file("version.properties")
+val versionProps = Properties().apply {
+    if (versionPropsFile.exists()) {
+        FileInputStream(versionPropsFile).use { load(it) }
+    }
+}
+val buildNumber = versionProps.getProperty("buildNumber", "0").toInt() + 1
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
 
+// 读取 local.properties 中的签名配置
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        FileInputStream(localPropertiesFile).use { load(it) }
+    }
+}
+
 android {
     namespace = "com.zouliangbu.footprint"
-    compileSdk = 33
+    // compileSdk 必须 >= 34：Room 2.6.1 的传递依赖（androidx.sqlite:2.4.0、
+    // annotation-experimental:1.4.0 等）AAR metadata 要求 API 34。
+    // compileSdk 只决定编译期可用 API，与运行设备/模拟器的 API 级别无关，
+    // 所以要跑 android-33 模拟器并不需要把 compileSdk 降到 33。
+    compileSdk = 34
+
+    signingConfigs {
+        getByName("debug") {
+            storeFile = rootProject.file("zlb-debug.keystore")
+            storePassword = localProperties.getProperty("ZLB_STORE_PASSWORD", "zlb123456")
+            keyAlias = localProperties.getProperty("ZLB_KEY_ALIAS", "zlb-debug")
+            keyPassword = localProperties.getProperty("ZLB_KEY_PASSWORD", "zlb123456")
+        }
+    }
 
     defaultConfig {
         applicationId = "com.zouliangbu.footprint"
         minSdk = 26
+        // targetSdk=33 保持在 android-33 模拟器上的运行时行为与之前一致
         targetSdk = 33
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 10000 + buildNumber
+        versionName = "0.1.0.${buildNumber.toString().padStart(6, '0')}"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -25,6 +61,7 @@ android {
         }
         debug {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -53,6 +90,21 @@ android {
     }
 }
 
+// 每次 assembleDebug 成功后把 buildNumber 回写，下次打包自动 +1。
+val bumpBuildNumber = tasks.register("bumpBuildNumber") {
+    doLast {
+        versionProps["buildNumber"] = buildNumber.toString()
+        versionPropsFile.writeBytes(
+            "buildNumber=${buildNumber}\n".toByteArray(Charsets.UTF_8)
+        )
+        println("buildNumber -> $buildNumber")
+    }
+}
+// 挂到 assemble 系列任务（assembleDebug/assembleRelease 都会触发）
+tasks.matching { it.name.startsWith("assemble") }.configureEach {
+    finalizedBy(bumpBuildNumber)
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
@@ -69,6 +121,10 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+
+    // 导航：锁 2.7.7。禁止升 2.8+——其传递依赖会把 Compose 抬到 1.7.x，
+    // 与 Kotlin 1.9.24 / compose compiler 1.5.14 组合未验证，有编译风险。
+    implementation("androidx.navigation:navigation-compose:2.7.7")
 
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
