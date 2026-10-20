@@ -211,8 +211,19 @@ docker compose up -d --build
 | jar 兼容性 | ✅ | ✅（arm64 原生） | ✅ |
 | 常驻方式 | 前台窗口 | 前台 / `launchd` | systemd / compose |
 
-### 7.5 换行符（跨平台协作的隐形坑）
+### 7.5 换行符 & 编码（跨平台协作的隐形坑）
 
 仓库根目录加了 `.gitattributes`：`.sh`/`gradlew`/`Dockerfile`/`.sql` 强制 **LF**，`.ps1` 强制 **CRLF**。
 否则在 Windows 上 checkout 后拿到 CRLF 的 `run-dev.sh`，到 Mac 上会直接报
 `bad interpreter: /usr/bin/env: 'bash\r': No such file or directory`。
+
+`run-dev.ps1` 必须保存为 **UTF-8 带 BOM**。Windows PowerShell 5.1 在无 BOM 时按 GBK 解码，
+文件里的中文会把脚本解析坏（`TerminatorExpectedAtEndOfString`）。改完用
+`Set-Content -Encoding UTF8` 覆盖保存即可（PS 5.1 的 `-Encoding UTF8` 会写 BOM）。
+
+两个已经踩过的 PowerShell 5.1 坑（脚本里已绕开，改脚本时别再踩）：
+
+| 坑 | 现象 | 正解 |
+|---|---|---|
+| 无 BOM 的 UTF-8 | 中文乱码 + 语法解析失败 | 存成 UTF-8 with BOM |
+| `$ErrorActionPreference='Stop'` + `java -version 2>&1` | `java -version` 把版本写 stderr，被当成终止错误 → 误报"找不到 java" | 先 `Get-Command java` 判存在，取版本时临时放宽偏好设置 |

@@ -26,13 +26,24 @@ Set-Location $PSScriptRoot
 $Jar = 'target/zouliangbu-server-0.1.0.jar'
 
 # ---------- 1. JDK 检查 ----------
-try {
-    $verLine = (java -version 2>&1 | Select-Object -First 1).ToString()
-    Write-Host "java: $verLine"
-} catch {
+# 坑1：java -version 把版本写到 stderr。在 ErrorActionPreference=Stop 下做 2>&1，
+#      PS 5.1 会把 stderr 内容包成 ErrorRecord 并当成终止错误 → 误判"找不到 java"。
+#      所以先 Get-Command 判断存在性，再临时放宽偏好设置去取版本。
+# 坑2：无 BOM 的 UTF-8 会被 PS 5.1 按 GBK 解码，中文把脚本解析坏。
+$javaCmd = Get-Command java -ErrorAction SilentlyContinue
+if (-not $javaCmd) {
     Write-Host "[ERROR] 找不到 java，请安装 JDK 17（Temurin / Zulu）并配好 JAVA_HOME" -ForegroundColor Red
     exit 1
 }
+
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    $verLine = (& java -version 2>&1 | ForEach-Object { $_.ToString() } | Select-Object -First 1)
+} finally {
+    $ErrorActionPreference = $prevEap
+}
+Write-Host "java: $verLine"
 if ($verLine -notmatch '"(\d+)') {
     Write-Host "[ERROR] 无法识别 java 版本：$verLine" -ForegroundColor Red
     exit 1
