@@ -194,7 +194,9 @@ class RecordingTrackService : Service() {
                 sessionId = sid,
                 distanceMeters = distanceMeters,
                 elapsedMs = SystemClock.elapsedRealtime() - startElapsedRealtime,
-                pointCount = pointCount
+                pointCount = pointCount,
+                // 地图折线只吃增量：UI 侧按 timestamp 去重后追加（重进页面时先从 DB 补齐）。
+                lastPoint = lastPoint
             )
         )
     }

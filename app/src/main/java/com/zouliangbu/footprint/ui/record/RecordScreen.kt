@@ -83,6 +83,8 @@ fun RecordScreen(
     val context = LocalContext.current
     val snapshot by vm.recording.collectAsStateWithLifecycle()
     val sessions by vm.sessions.collectAsStateWithLifecycle()
+    // 实时轨迹：Service 每落一个点推一次，ViewModel 追加后这里跟着重组，地图折线就"长"出来。
+    val track by vm.track.collectAsStateWithLifecycle()
     val isRecording = snapshot != null
 
     // 摘要对话框：service stop 后展示
@@ -123,7 +125,11 @@ fun RecordScreen(
     }
 
     Box(Modifier.fillMaxSize()) {
-        MapViewWrapper(Modifier.fillMaxSize())
+        // 记录中实时画线（P1.2）：不画起终点、不自动缩放——相机要跟着当前位置走。
+        MapViewWrapper(
+            modifier = Modifier.fillMaxSize(),
+            track = track
+        )
 
         // 左上角返回键（地图画到状态栏后面，需要 statusBarsPadding）
         Box(

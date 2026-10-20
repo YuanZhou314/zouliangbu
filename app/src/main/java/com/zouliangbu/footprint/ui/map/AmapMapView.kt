@@ -14,7 +14,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +31,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.amap.api.location.AMapLocation
+import com.amap.api.maps.AMap
 import com.amap.api.maps.CameraUpdateFactory
 import com.amap.api.maps.LocationSource
 import com.amap.api.maps.MapView
@@ -52,9 +57,22 @@ import kotlinx.coroutines.launch
  * 地图的"我的位置"通过 [AmapLocationSource] 桥接 App 共享的 [LocationProvider] 定位流，
  * 与轨迹记录 Service 共用同一个上游 AMapLocationClient，避免多个定位客户端互相抢资源。
  * 内置"定位到当前位置"按钮关闭，改由 Compose 自绘（右下角），位置完全可控。
+ *
+ * 轨迹渲染（P1.2）：调用方只传**纯数据** [track]，本组件内部通过 [AmapMapEngine] 落成
+ * Polyline / marker。上层不出现 `LatLng` / `Polyline` 等厂商类型（ROADMAP P1.1 的约束）。
+ *
+ * @param track         轨迹点（GCJ-02）。记录页传实时增长的列表；详情页传整条轨迹。
+ * @param showEndpoints 是否画起点 / 终点 marker（记录中不画，回看时才有意义）。
+ * @param autoZoom      是否自动把相机缩放到整条轨迹（回看用；记录中必须为 false，
+ *                      否则相机在每次加点时被重置，跟不住当前位置）。
  */
 @Composable
-fun AmapMapView(modifier: Modifier = Modifier) {
+fun AmapMapView(
+    modifier: Modifier = Modifier,
+    track: List<MapPoint> = emptyList(),
+    showEndpoints: Boolean = false,
+    autoZoom: Boolean = false
+) {
     val context = LocalContext.current
     if (!AmapKey.isConfigured(context)) {
         MapKeyPlaceholder(modifier)
@@ -64,10 +82,16 @@ fun AmapMapView(modifier: Modifier = Modifier) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val mapView = remember { createMapView(context) }
     val provider = remember { (context.applicationContext as FootprintApp).locationProvider }
+    // mapView 在 createMapView 里已经 onCreate 过，map 对象此刻可用。
+    val engine = remember(mapView) { AmapMapEngine(mapView.map) }
 
     // 地图侧定位源：桥接共享 LocationProvider。Compose 负责订阅/退订，随生命周期。
     val source = remember { AmapLocationSource(provider) }
     val scope = remember { CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate) }
+
+    // 记录中是否跟着最新点走。用户一旦手动拖动地图就关掉（地图自己动比不动更烦），
+    // 点右下角自绘定位按钮可以重新开启。回看模式（autoZoom）永不跟随。
+    var followEnabled by remember { mutableStateOf(!autoZoom) }
 
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
@@ -90,9 +114,19 @@ fun AmapMapView(modifier: Modifier = Modifier) {
         }
         lifecycleOwner.lifecycle.addObserver(observer)
 
+        // 地图加载完成后重放覆盖物：AMap 在地图未就绪时 addPolyline 可能不渲染。
+        val onMapLoaded = AMap.OnMapLoadedListener { engine.reapply() }
+        mapView.map.setOnMapLoadedListener(onMapLoaded)
+
+        // 用户拖动 / 缩放地图 → 停止自动跟随，把视野控制权交还用户。
+        val onTouch = AMap.OnMapTouchListener { followEnabled = false }
+        mapView.map.setOnMapTouchListener(onTouch)
+
         // 首点跟随：拿到第一个有效定位后把相机移到真实位置，避免初始停在默认中心
         //（AMap 默认中心不在国内用户位置，WiFi 下点定位才会跳变）。
+        // 回看模式（autoZoom）不跟随定位，否则会和 bbox 缩放互相抢相机。
         val followJob = scope.launch {
+            if (autoZoom) return@launch
             source.firstFix { loc ->
                 mapView.map.animateCamera(
                     CameraUpdateFactory.newLatLngZoom(
@@ -104,10 +138,42 @@ fun AmapMapView(modifier: Modifier = Modifier) {
 
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            mapView.map.setOnMapLoadedListener(null)
+            mapView.map.setOnMapTouchListener(null)
             followJob.cancel()
             source.destroy()
             scope.cancel()
             mapView.onDestroy()
+        }
+    }
+
+    // 轨迹折线：每个新点都会让 track 变成新 List，触发一次 setPoints（O(n)，1 Hz 量级可接受）。
+    LaunchedEffect(engine, track) {
+        engine.setTrack(track)
+    }
+
+    // 起终点 marker：只有回看模式才画，记录中画了也没意义（终点一直在变）。
+    LaunchedEffect(engine, track, showEndpoints) {
+        if (showEndpoints && track.isNotEmpty()) {
+            engine.setEndpoints(track.first(), track.last())
+        } else {
+            engine.setEndpoints(null, null)
+        }
+    }
+
+    // 回看模式：轨迹首次到位后缩放到整条线（只依赖"有没有点"，避免每次加点都重置相机）。
+    LaunchedEffect(engine, autoZoom, track.isEmpty()) {
+        if (autoZoom && track.isNotEmpty()) {
+            engine.zoomToTrack(track)
+        }
+    }
+
+    // 记录中跟随：每个新点把相机平移过去（不平移动画、不改缩放）。
+    // 不跟随的话，走几百米线就跑出屏幕，等于"看着有线但看不见"。
+    val latest = track.lastOrNull()
+    LaunchedEffect(engine, latest, autoZoom) {
+        if (!autoZoom && followEnabled && latest != null) {
+            engine.followTo(latest)
         }
     }
 
@@ -118,8 +184,9 @@ fun AmapMapView(modifier: Modifier = Modifier) {
         )
 
         // 自绘定位按钮（右下角，位置可控，替代高德内置按钮——内置按钮位置由 SDK 定死）。
-        // 点击把相机移回最近一次定位点。
+        // 点击把相机移回最近一次定位点，**并重新开启自动跟随**（用户拖图跑偏后一键回到自己身上）。
         val recenterClick: () -> Unit = {
+            followEnabled = true
             provider.lastLocation?.let { loc ->
                 mapView.map.animateCamera(
                     CameraUpdateFactory.newLatLngZoom(

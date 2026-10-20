@@ -9,6 +9,70 @@
 
 ---
 
+## [2026-10-20] P1 起步：地图引擎抽象 + 记录中实时折线（buildNumber=6）
+
+### 触发
+你的指令：README 暂时不更新，**先把当前工作区 commit 一版当回滚点，然后开始做 P1**。
+
+### 提交基线（回滚点）
+- `5bcaf63` feat: 五栏导航框架 + 内容层 Mock + 统一定位架构（App 侧全部未提交改动 + keystore 入库）
+- `ec97458` feat(server): 内容服务端 v1（与 App 解耦，单独一个 commit，便于单独回滚）
+- `README.md` 按你的要求**保持未提交**（工作区仍显示 `M README.md`），P1 收尾时再统一改
+
+### 产出（P1.1 + P1.2，另附相机跟随）
+
+| 文件 | 变更 |
+|---|---|
+| `ui/map/MapPoint.kt` | 新增。与引擎无关的经纬度点（GCJ-02），业务层只认这个类型 |
+| `ui/map/MapEngine.kt` | 新增。`setTrack` / `clearTrack` / `setEndpoints` / `zoomToTrack` / `moveTo` / `followTo` |
+| `ui/map/AmapMapEngine.kt` | 新增。高德实现：Polyline 复用 + Marker 复用 + bbox 缩放 + 退化保护 + `reapply()` |
+| `ui/map/AmapMapView.kt` | 加 `track` / `showEndpoints` / `autoZoom` 三个**声明式**参数；相机跟随 + 用户拖图即停 |
+| `ui/map/MapViewWrapper.kt` | 透传三个参数；osmdroid 分支不接收（D1：只兜底不画线） |
+| `data/RecordingTrackState.kt` | `Snapshot` 加 `lastPoint`（最近一个已落库的点，供地图画线） |
+| `service/RecordingTrackService.kt` | `publishSnapshot()` 带上 `lastPoint` |
+| `ui/record/RecordViewModel.kt` | 新增 `track: StateFlow<List<MapPoint>>`：进页面从 DB 补齐 + 按 timestamp 去重追加 |
+| `ui/record/RecordScreen.kt` | 把 `track` 传给地图（记录中实时画线） |
+
+### 关键决策（下次别再纠结）
+
+1. **osmdroid 分支不实现 MapEngine**。ROADMAP D1 已经定过"兜底不做功能对等"，
+   所以无 Key 时地图上只有蓝点没有线——这是个**既定取舍，不是 bug**，别去补。
+2. **Polyline 只创建一次**，之后 `polyline.points = 新点集`（底层 `setPoints`）。
+   每点 `addPolyline` 会让覆盖物持续堆积且 AMap 内部重建纹理。
+3. **地图没加载完就 addPolyline 可能不渲染** → `AmapMapEngine` 缓存最后一次 track，
+   由 `OnMapLoadedListener` 调 `reapply()` 重放。
+4. **相机跟随必须可被用户打断**：`OnMapTouchListener` 一触发就关跟随，
+   右下角定位按钮重新开启。否则用户想看看周围，地图会一直把自己拽回去。
+5. **`newLatLngBounds` 遇到零面积 bbox 会抛异常**（单点 / 所有点重合）→ 先算跨度，
+   退化时改 `newLatLngZoom`。
+6. **类型名用 `MapPoint` 不用 `GeoPoint`**：osmdroid 有 `org.osmdroid.util.GeoPoint`，
+   同名会撞（同包 + 显式 import 的优先级问题，排查起来很费时间）。
+7. **停止记录后不清空折线**：摘要卡弹着的时候地图上还能看见刚走的线；
+   下一次开始按新 sessionId 重新加载（顺带清掉上一条）。
+
+### 校验
+```
+./gradlew :app:compileDebugKotlin  → BUILD SUCCESSFUL（零 warning）
+./gradlew :app:assembleDebug       → BUILD SUCCESSFUL
+app/build/outputs/apk/debug/app-debug.apk
+  versionName 0.1.0.000006 / versionCode 10006 / 53.7 MB
+新类已进产物：ui/map/{MapPoint,MapEngine,AmapMapEngine}.class（17:33 编译，dex 已重打）
+```
+**未做真机验证**（按项目约定：Windows 端只产出 APK，装机由你来做）。
+
+### 真机验收清单（本轮只需看这 4 条）
+1. 开始记录 → 走动 20 m 以上，地图上出现**绿色轨迹线**（ForestGreen `#2E7D32`，10px 宽）
+2. 走动时相机**跟着自己走**，线始终在屏幕内
+3. 手指拖动地图 → 相机**不再自动回位**；点右下角蓝白定位按钮 → 恢复跟随
+4. 停止记录 → 摘要卡弹出，地图上**线还在**（不消失）
+
+### 下一步（P1 剩余）
+`1.3 历史列表`（`TrackSessionDao.observeCompleted` + `ui/tracks/TrackListScreen`，入口接「我的 → 我的记录」）
+→ `1.4 详情回看`（直接复用 `MapViewWrapper(track=…, showEndpoints=true, autoZoom=true)`）
+→ `1.5 CoordTransform` → `1.6 GPX 导出` → `1.7 导入` → `1.8 停止后跳详情`
+
+---
+
 ## [2026-10-20] 内容服务端 v1 落地（Java / Spring Boot 4）
 
 ### 触发

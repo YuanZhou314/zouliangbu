@@ -110,6 +110,24 @@
     `Button` 的完整 bounds（dump 时是 (0,0,0,0)），但能拿到内部 icon 的 bounds
     （如 `(230,1607)-(437,1965)`）。Tap icon center 比 tap 视觉位置可靠。
 
+## 地图引擎抽象（P1.1 产物，硬约束）
+
+业务层**不许**出现 `LatLng` / `Polyline` / `Marker` / `org.osmdroid.util.GeoPoint` 这些厂商类型。
+统一走 `ui/map/MapEngine` 接口 + `ui/map/MapPoint`（GCJ-02 纯数据）：
+
+- 记录页：`MapViewWrapper(track = 实时增长的列表)` —— 不画起终点、不自动缩放、相机跟随
+- 详情页：`MapViewWrapper(track = 整条轨迹, showEndpoints = true, autoZoom = true)`
+
+三条实现约束（踩过就别再踩）：
+1. **Polyline / Marker 只创建一次**，之后只换点集（`polyline.points = …` → `setPoints`）。
+   每点 `addPolyline` 会让覆盖物堆积 + AMap 重建纹理。
+2. **地图没加载完时加覆盖物可能不渲染** → `AmapMapEngine` 缓存最后一次设置，
+   `OnMapLoadedListener` 里 `reapply()` 重放。
+3. **相机跟随必须可被用户打断**：`OnMapTouchListener` 一触发就 `followEnabled = false`，
+   自绘定位按钮重新开启。否则用户拖图看周围时地图一直把自己拽回来。
+4. `newLatLngBounds` 对零面积 bbox（单点 / 点全重合）会抛异常，先判跨度再决定用不用。
+5. osmdroid 分支**不实现** MapEngine（ROADMAP D1：只兜底），无 Key 时只有蓝点没有线，属既定取舍。
+
 ## 关键文件速查
 
 | 文件 | 作用 |
@@ -124,8 +142,10 @@
 | `location/LocationProvider.kt` | **共享** `AMapLocationClient` Flow 封装（GCJ-02 输出），全 App 唯一 |
 | `location/CityProvider.kt` | 从共享定位流取城市名（first{} + 缓存），首页「同城」用 |
 | `service/RecordingTrackService.kt` | 前台服务：订阅共享定位流 → 过滤 → 累计 → 落库 |
-| `ui/map/MapViewWrapper.kt` | 地图路由入口 |
-| `ui/map/AmapMapView.kt` | 高德分支：LocationSource 桥接共享定位 + 自绘定位按钮 + 首点跟随 |
+| `ui/map/MapViewWrapper.kt` | 地图路由入口（透传 track / showEndpoints / autoZoom） |
+| `ui/map/MapEngine.kt` / `AmapMapEngine.kt` | 引擎接口 + 高德实现（折线 / 起终点 marker / bbox 缩放 / 跟随） |
+| `ui/map/MapPoint.kt` | 与引擎无关的 GCJ-02 坐标点（业务层只认这个） |
+| `ui/map/AmapMapView.kt` | 高德分支：LocationSource 桥接共享定位 + 自绘定位按钮 + 首点跟随 + 轨迹渲染 |
 | `ui/map/OsmMapView.kt` | osmdroid 分支（仅无 Key 时） |
 | `zouliangbu-server/` | 内容服务端（Java 17 + Spring Boot 4.1.1 + MyBatis-Plus + Flyway） |
 

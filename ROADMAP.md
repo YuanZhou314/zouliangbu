@@ -64,7 +64,7 @@
 | Room 持久化（sessions + points） | ✅ 可用，**v1 无 migration、exportSchema=false** | `data/db/*` |
 | 记录页（地图 + 浮层 + 摘要卡 + 权限两步） | ✅ 可用 | `ui/record/RecordScreen.kt` |
 | 距离计算（Haversine + 精度软过滤） | ✅ 可用，**只算平面距离** | `util/Distance.kt` |
-| 轨迹折线绘制 | ❌ 无 | — |
+| 轨迹折线绘制 | ✅ 记录中实时 + 回看静态（高德分支；osmdroid 按 D1 不画） | `ui/map/AmapMapEngine.kt` |
 | 历史记录列表 / 详情回看 | ❌ 无（入口占位已在「我的」） | — |
 | GPX 导出 / 导入 | ❌ 无 | — |
 | 爬升/下降/配速统计 | ❌ 无 | — |
@@ -114,8 +114,8 @@
 
 | # | 任务 | 主要改动 | 验收标准 | 参考工时 |
 |---|---|---|---|---|
-| 1.1 | **地图引擎抽象**（必须先做） | 抽 `ui/map/MapEngine` 接口：`drawTrack(points)` / `addMarker` / `zoomToBbox` / `followLocation`。Amap 实现全套；Osm 只实现空壳（见 D1） | 上层业务代码不再出现 `aMap` / `MapView` 类型 | 0.5d |
-| 1.2 | **记录中实时画线** | `AmapMapView` 加 `Polyline`；订阅 `RecordingTrackState` 的增量点；批量刷新 | 走动时线跟着长；5000 点不掉帧（每 N 点或每 2 秒批量 `setPoints`，不要每点重建） | 1.5d |
+| ✅1.1 | **地图引擎抽象**（必须先做，2026-10-20 完成） | `ui/map/MapEngine` + `MapPoint` + `AmapMapEngine`：`setTrack` / `setEndpoints` / `zoomToTrack` / `moveTo` / `followTo`。Osm 不实现（D1） | 上层业务代码不再出现 `aMap` / `LatLng` / `Polyline` 类型 ✅ | 0.5d |
+| ✅1.2 | **记录中实时画线**（2026-10-20 完成） | `AmapMapEngine` 复用 Polyline 对象换点集；`RecordingTrackState.Snapshot.lastPoint` 推增量；`RecordViewModel.track` 从 DB 补齐 + 去重；附带相机跟随（用户拖图即停） | 走动时线跟着长 ✅；1 Hz 量级 O(n) 刷新，5000 点未实测 | 1.5d |
 | 1.3 | **历史轨迹列表** | `TrackSessionDao.observeCompleted()`；`ui/tracks/TrackListScreen.kt`；从「我的 → 我的记录」进入 | 停止记录后立刻出现在列表；空态有引导文案 | 1d |
 | 1.4 | **轨迹详情回看** | `ui/tracks/TrackDetailScreen.kt`：只读地图 + 整条轨迹 + 起终点 marker + 统计卡 | 点列表项进详情，地图自动缩放到轨迹 bbox | 1.5d |
 | 1.5 | **坐标转换工具**（1.6 的前置） | `util/CoordTransform.kt`：`gcj02ToWgs84` / `wgs84ToGcj02` | 转换后与在线工具比对，误差 < 5m | 0.5d |
