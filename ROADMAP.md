@@ -66,10 +66,11 @@
 | 距离计算（Haversine + 精度软过滤） | ✅ 可用，**只算平面距离** | `util/Distance.kt` |
 | 轨迹折线绘制 | ✅ 记录中实时 + 回看静态（高德分支；osmdroid 按 D1 不画） | `ui/map/AmapMapEngine.kt` |
 | 历史记录列表 / 详情回看 | ❌ 无（入口占位已在「我的」） | — |
-| GPX 导出 / 导入 | ❌ 无 | — |
+| GPX 导出 | ✅ 逻辑 + UI 入口完成（「停止记录」摘要卡 → 导出 → 系统分享），待真机验证坐标不偏 | `export/GpxWriter.kt` `GpxExporter.kt` |
+| GPX 导入 | 🟡 解析器完成 + 单测覆盖，UI 入口等 P1.3 列表落地 | `export/GpxParser.kt` |
 | 爬升/下降/配速统计 | ❌ 无 | — |
 | 断点恢复（进程被杀后的悬挂会话） | ❌ 无 | — |
-| 单元测试 | ❌ 零覆盖 | — |
+| 单元测试 | ✅ 首批 21 用例（坐标转换 6 / GPX 导出 8 / GPX 导入 7） | `app/src/test/` |
 | git 提交 | ⚠️ 两轮改动全部未提交（含 keystore 未入库） | — |
 
 ---
@@ -118,9 +119,9 @@
 | ✅1.2 | **记录中实时画线**（2026-10-20 完成） | `AmapMapEngine` 复用 Polyline 对象换点集；`RecordingTrackState.Snapshot.lastPoint` 推增量；`RecordViewModel.track` 从 DB 补齐 + 去重；附带相机跟随（用户拖图即停） | 走动时线跟着长 ✅；1 Hz 量级 O(n) 刷新，5000 点未实测 | 1.5d |
 | 1.3 | **历史轨迹列表** | `TrackSessionDao.observeCompleted()`；`ui/tracks/TrackListScreen.kt`；从「我的 → 我的记录」进入 | 停止记录后立刻出现在列表；空态有引导文案 | 1d |
 | 1.4 | **轨迹详情回看** | `ui/tracks/TrackDetailScreen.kt`：只读地图 + 整条轨迹 + 起终点 marker + 统计卡 | 点列表项进详情，地图自动缩放到轨迹 bbox | 1.5d |
-| 1.5 | **坐标转换工具**（1.6 的前置） | `util/CoordTransform.kt`：`gcj02ToWgs84` / `wgs84ToGcj02` | 转换后与在线工具比对，误差 < 5m | 0.5d |
-| 1.6 | **GPX 1.1 导出** | `export/GpxWriter.kt`（手写 XML，不引三方库）；DB 里的 GCJ-02 **必须转 WGS-84** 再写；`FileProvider` + 系统分享 | 导出的 GPX 能被 OsmAnd / 两步路 / Google Earth 正常打开且位置不偏 | 1d |
-| 1.7 | **GPX 导入**（可与 1.6 合并） | `export/GpxParser.kt`（`XmlPullParser`）；导入后落成只读 session（WGS-84 → GCJ-02 再入库） | 能导入别人分享的 GPX 并在详情页看到 | 1d |
+| ✅1.5 | **坐标转换工具**（2026-10-20 完成） | `util/CoordTransform.kt`：`gcj02ToWgs84`（迭代逼近）/ `wgs84ToGcj02` | 单测锁住境外不偏、境内量级 300–800 m、往返残差 < 0.3 m；与在线工具逐点比对仍待真机 | 0.5d |
+| ✅1.6 | **GPX 1.1 导出**（2026-10-20 完成） | `export/GpxWriter.kt`（手写 XML）+ `GpxExporter.kt`（cacheDir → FileProvider → 系统分享）；摘要卡「导出 GPX」按钮 | 产出可被标准 DOM 解析、坐标确为 WGS-84；**外部 App 打开不偏待真机验证** | 1d |
+| 🟡1.7 | **GPX 导入**（解析器完成，UI 待做） | `export/GpxParser.kt`：SAX（不用 android.util.Xml，否则 JVM 单测跑不了）；导入转 GCJ-02 | 解析器 7 用例全绿；「导入并看到详情」等 P1.3/P1.4 落地后再接 | 1d |
 | 1.8 | 停止后跳详情 | `RecordScreen` 摘要卡加「查看轨迹」按钮 | 停止 → 摘要 → 一键进详情 | 0.3d |
 
 **风险与坑**

@@ -48,6 +48,20 @@
             android:foregroundServiceType="location"
             android:exported="false" />
 
+        <!-- GPX 导出：把 cacheDir/gpx 下的文件以 content:// 形式临时授权给外部 App
+             （微信 / 邮件 / OsmAnd / 两步路）。
+             authority 必须与 GpxExporter 里 `${packageName}.fileprovider` 一致，
+             否则 FileUriExposedException（Android 7+ 禁止 file:// 外传）。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
         <!-- AMap (高德) Android SDK Key：
              此处的 Key 在运行时被 AMap Location SDK 和 3D Map SDK 自动读取。
              TODO：在 https://lbs.amap.com 注册账号，创建 Android 应用，

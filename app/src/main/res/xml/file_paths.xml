@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider 授权路径。
+  只开放 cacheDir/gpx/ 一个子目录：导出的 GPX 是临时文件，随缓存清理，不污染用户存储，
+  也不需要任何存储权限（Android 10+ 分区存储下 WRITE_EXTERNAL_STORAGE 已无效）。
+  这里的 name/path 必须与 GpxExporter 里 File(context.cacheDir, "gpx") 一致。
+-->
+<paths>
+    <cache-path name="gpx" path="gpx/" />
+</paths>

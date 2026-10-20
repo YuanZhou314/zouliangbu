@@ -3,6 +3,7 @@ package com.zouliangbu.footprint.ui.record
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -270,14 +271,33 @@ fun RecordScreen(
                         )
                         Spacer(Modifier.height(8.dp))
                         Text(
-                            "（已保存到本地数据库）",
+                            "已保存到本地数据库，可导出 GPX 分享或导入其他轨迹软件",
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                             fontSize = 12.sp
                         )
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { summaryFor = null }) { Text("关闭") }
+                    Row {
+                        // 导出 GPX：写 cacheDir → FileProvider 授权 → 系统分享面板。
+                        // 坐标在 GpxWriter 里转成 WGS-84，外部软件打开才不会偏几百米。
+                        TextButton(
+                            onClick = {
+                                vm.exportGpx(session) { intent ->
+                                    if (intent != null) {
+                                        context.startActivity(intent)
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            "这条记录还没有轨迹点，无法导出",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                }
+                            }
+                        ) { Text("导出 GPX") }
+                        TextButton(onClick = { summaryFor = null }) { Text("关闭") }
+                    }
                 }
             )
         }

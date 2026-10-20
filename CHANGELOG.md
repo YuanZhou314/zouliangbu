@@ -9,6 +9,72 @@
 
 ---
 
+## [2026-10-20] P1.5–P1.7 地基：坐标转换 + GPX 读写 + 首批单测（buildNumber=7）
+
+### 触发
+真机画线暂时测不了 → 转做**不依赖设备、能在 JVM 上跑验证**的部分。
+坐标转换和 GPX 正好是 P1 里风险最高、又纯计算的两块（ROADMAP 原话："GPX 坐标系是 P1 最大的雷"）。
+
+### 产出
+
+| 文件 | 作用 |
+|---|---|
+| `util/CoordTransform.kt` | `wgs84ToGcj02`（克拉索夫斯基椭球加偏）/ `gcj02ToWgs84`（不动点迭代，3 轮 <0.1 m）/ `isOutOfChina` |
+| `util/GeoCoord.kt`（同文件内） | 经纬度纯数据类 |
+| `export/GpxWriter.kt` | GPX 1.1 手写 XML；**GCJ-02 → WGS-84**；6 位小数；UTC 时间；非法点跳过；XML 转义 |
+| `export/GpxParser.kt` | SAX 解析 `trk/trkseg/trkpt`；**WGS-84 → GCJ-02**；支持无命名空间 GPX；XXE 已关 |
+| `export/GpxExporter.kt` | 写 `cacheDir/gpx/` → `FileProvider.getUriForFile` → 系统分享 Intent |
+| `res/xml/file_paths.xml` + Manifest `<provider>` | authority `com.zouliangbu.footprint.fileprovider` |
+| `ui/record/RecordViewModel.exportGpx()` | 读该会话所有点 → 导出 → 回调分享 Intent（IO 线程） |
+| `ui/record/RecordScreen.kt` | 摘要卡加「导出 GPX」按钮；无点时 Toast 提示 |
+| `app/src/test/java/**`（3 个测试类） | 项目**首批**单元测试，21 用例 |
+
+### 关键决策
+
+1. **用 `javax.xml.parsers` 的 SAX，不用 `android.util.Xml` 的 XmlPullParser**（ROADMAP 原写的是后者）。
+   原因：`android.util.Xml` 是框架类，在 JVM 单测里是 stub，一调就抛
+   `RuntimeException: Method ... not mocked`。GPX 是"格式一错就全错"的解析，必须能回归测试，
+   所以选同一份代码在真机和 JVM 都能跑的 SAX。**这是对 ROADMAP 的有意偏离，记在这里。**
+2. **坐标边界只在 writer / parser 两处**：DB 与地图全链路恒为 GCJ-02，GPX 恒为 WGS-84，
+   不要在别的地方顺手转（转两次就偏几百米，且很难发现）。
+3. **反解用不动点迭代**：`wgs += gcj - forward(wgs)`，3 轮残差 < 0.1 m。没有解析逆，别去找公式。
+4. **文件走 cacheDir + FileProvider**，不申请任何存储权限（Android 10+ 分区存储下
+   `WRITE_EXTERNAL_STORAGE` 已无效），也不在用户相册/文档里留垃圾。
+5. **没有轨迹点时不导出**：空 GPX 传给别的 App 只会让人困惑；UI 用 Toast 明确提示。
+6. **导入的 UI 入口暂不接**：等 P1.3 列表页落地后再挂"导入 GPX"，否则没有合理的落点。
+
+### 校验（本轮全部可执行，不依赖真机）
+```
+./gradlew :app:testDebugUnitTest
+  CoordTransformTest   6 用例  0 失败
+  GpxWriterTest        8 用例  0 失败
+  GpxParserTest        7 用例  0 失败
+  --------------------------------
+  合计 21 用例，0 失败 0 错误
+./gradlew :app:assembleDebug → 0.1.0.000007 / versionCode 10007 / 53.8 MB
+aapt2 dump xmltree … | provider authority = com.zouliangbu.footprint.fileprovider ✓
+```
+
+测试锁的三类性质：
+- 坐标：境外不偏移 / 京津广拉哈昆五城偏移量级 300–800 m / 往返残差 < 0.3 m / 方向应北偏东
+- 导出：产出能被标准 DOM 解析 / 坐标确实是 WGS-84（且与 GCJ 原值有可见差异）/
+  越界点跳过 / 海拔 0 不写 `<ele>` / 空轨迹仍是合法文档
+- 导入：有命名空间与无命名空间都能解析 / 缺 ele+time 不崩 / 非法坐标忽略 /
+  格式错误抛 `IllegalArgumentException` / **写出再读回坐标无损**
+
+### 已知限制
+- 单测是**自洽性质**验证（量级、往返、境内外），没有与权威在线工具逐点比对。
+  真机上导出一次，用 Google Earth / OsmAnd 打开看位置对不对，是唯一能证明精度的方法。
+- 只解析 `<trk>/<trkseg>/<trkpt>`；`<rte>/<rtept>`（路线）、`<wpt>`（航点）未支持。
+- 分享 mime 用 `application/gpx+xml`；若微信等 App 在分享面板里不出现，
+  改 `GpxExporter` 里的 type 为 `application/octet-stream`（文件名仍是 .gpx，不影响识别）。
+
+### 下一步
+P1.3 历史列表（`observeCompleted` + `ui/tracks/TrackListScreen`）→ P1.4 详情回看（复用
+`MapViewWrapper(autoZoom=true, showEndpoints=true)`）→ 把「导出 / 导入 GPX」挂到详情与列表上。
+
+---
+
 ## [2026-10-20] P1 起步：地图引擎抽象 + 记录中实时折线（buildNumber=6）
 
 ### 触发

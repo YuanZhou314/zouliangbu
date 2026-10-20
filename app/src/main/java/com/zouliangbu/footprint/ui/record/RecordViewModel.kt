@@ -1,19 +1,23 @@
 package com.zouliangbu.footprint.ui.record
 
 import android.app.Application
+import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.RecordingTrackState
 import com.zouliangbu.footprint.data.db.TrackPoint
 import com.zouliangbu.footprint.data.db.TrackSession
+import com.zouliangbu.footprint.export.GpxExporter
 import com.zouliangbu.footprint.ui.map.MapPoint
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * 记录页（出发）ViewModel。
@@ -69,6 +73,25 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val id = repo.startSession(System.currentTimeMillis())
             onReady(id)
+        }
+    }
+
+    /**
+     * 把一条会话导出成 GPX 并返回系统分享 Intent。
+     *
+     * 没有轨迹点时回调 null（UI 侧提示），不生成空文件——空 GPX 传给别的 App 只会让人困惑。
+     * 文件读写放 IO 线程：点数上万时序列化 + 落盘不能卡 UI。
+     */
+    fun exportGpx(session: TrackSession, onReady: (Intent?) -> Unit) {
+        viewModelScope.launch {
+            val intent = withContext(Dispatchers.IO) {
+                val points = repo.getPointsForSession(session.id)
+                if (points.isEmpty()) return@withContext null
+                val app = getApplication<Application>()
+                val uri = GpxExporter.export(app, session, points)
+                GpxExporter.shareIntent(uri)
+            }
+            onReady(intent)
         }
     }
 }

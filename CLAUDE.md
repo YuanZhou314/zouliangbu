@@ -128,6 +128,24 @@
 4. `newLatLngBounds` 对零面积 bbox（单点 / 点全重合）会抛异常，先判跨度再决定用不用。
 5. osmdroid 分支**不实现** MapEngine（ROADMAP D1：只兜底），无 Key 时只有蓝点没有线，属既定取舍。
 
+## 坐标系与 GPX（P1.5–P1.7 产物，硬约束）
+
+**全链路 GCJ-02，只有 GPX 边界转 WGS-84**：
+- 定位 SDK 输出 GCJ-02 → Room 存 GCJ-02 → 地图渲染 GCJ-02（全程不转）
+- 导出：`GpxWriter` 里 `gcj02ToWgs84()`；导入：`GpxParser` 里 `wgs84ToGcj02()`
+- **不要在其他地方顺手转**，重复转换会偏几百米且极难排查
+
+其他约束：
+1. 反解没有解析公式，用不动点迭代 `wgs += gcj - forward(wgs)`，3 轮残差 < 0.1 m。
+2. GPX 解析用 `javax.xml.parsers` 的 **SAX**，不要用 `android.util.Xml`——
+   后者在 `testDebugUnitTest` 里是 stub，一调就 `not mocked` 崩掉。
+3. `FileProvider` authority = `${applicationId}.fileprovider`，Manifest 与 `GpxExporter`
+   两处必须一致；导出目录 `cacheDir/gpx/` 与 `res/xml/file_paths.xml` 的 `<cache-path>` 对应。
+4. GPX 时间写 **UTC + `Z`**（本地时区会让别的软件算错配速）；坐标 6 位小数；
+   海拔 0 不写 `<ele>`（高德拿不到海拔时给 0）。
+5. 单测基线：`./gradlew :app:testDebugUnitTest` → 21 用例全绿
+   （CoordTransform 6 / GpxWriter 8 / GpxParser 7）。改坐标或 GPX 逻辑必须保持全绿。
+
 ## 关键文件速查
 
 | 文件 | 作用 |
@@ -141,6 +159,8 @@
 | `data/AmapKey.kt` | Key 读取 + 占位符检测 |
 | `location/LocationProvider.kt` | **共享** `AMapLocationClient` Flow 封装（GCJ-02 输出），全 App 唯一 |
 | `location/CityProvider.kt` | 从共享定位流取城市名（first{} + 缓存），首页「同城」用 |
+| `util/CoordTransform.kt` | GCJ-02 ↔ WGS-84（导出/导入的唯一转换点） |
+| `export/GpxWriter.kt` / `GpxParser.kt` / `GpxExporter.kt` | GPX 写出 / 解析 / 落盘 + 分享 |
 | `service/RecordingTrackService.kt` | 前台服务：订阅共享定位流 → 过滤 → 累计 → 落库 |
 | `ui/map/MapViewWrapper.kt` | 地图路由入口（透传 track / showEndpoints / autoZoom） |
 | `ui/map/MapEngine.kt` / `AmapMapEngine.kt` | 引擎接口 + 高德实现（折线 / 起终点 marker / bbox 缩放 / 跟随） |
