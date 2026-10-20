@@ -7,6 +7,8 @@ package com.zouliangbu.footprint.data.db
  * 列表滚动时每帧都在碰磁盘。这里用一条带子查询的 SQL 一次算完。
  *
  * 不是 @Entity——Room 会把它当普通 POJO 按列名映射，所以 SQL 里必须显式 `AS` 别名。
+ *
+ * @property pausedMs 累计暂停时长，展示时长时要从 (endTime - startTime) 里扣掉。
  */
 data class TrackSummary(
     val id: Long,
@@ -14,5 +16,10 @@ data class TrackSummary(
     val endTime: Long?,
     val totalDistanceMeters: Float,
     val name: String?,
+    val pausedMs: Long,
     val pointCount: Int
-)
+) {
+    /** 活动时长（扣暂停）。 */
+    val activeDurationMs: Long
+        get() = ((endTime ?: startTime) - startTime - pausedMs).coerceAtLeast(0L)
+}

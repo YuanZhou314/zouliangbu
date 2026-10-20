@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [TrackSession::class, TrackPoint::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -39,11 +39,22 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v3：累计暂停时长（P2.4）。老记录当作从未暂停，默认 0。 */
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // NOT NULL + DEFAULT：SQLite 的 ALTER TABLE ADD COLUMN 要求非空列必须带默认值，
+                // 老行自动填 0，正好等价于"这条记录没暂停过"。
+                db.execSQL(
+                    "ALTER TABLE track_sessions ADD COLUMN pausedMs INTEGER NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         /**
          * 迁移清单。Room 会从当前库版本逐级跑，缺一条就在启动时抛
          * `IllegalStateException: Room cannot verify the data integrity`。
          */
-        private val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2)
+        private val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {

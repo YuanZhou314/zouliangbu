@@ -27,11 +27,14 @@ class TrackRepository(private val db: AppDatabase) {
         pointDao.insert(point)
     }
 
-    suspend fun finalizeSession(id: Long, endTime: Long, distanceMeters: Float) {
-        sessionDao.finalize(id, endTime, distanceMeters)
+    suspend fun finalizeSession(id: Long, endTime: Long, distanceMeters: Float, pausedMs: Long) {
+        sessionDao.finalize(id, endTime, distanceMeters, pausedMs)
     }
 
     // ===== 读取 =====
+
+    /** 悬挂会话（endTime IS NULL），只在 App 启动时用于恢复，见 SessionRecovery。 */
+    suspend fun unfinishedSessions(): List<TrackSession> = sessionDao.unfinished()
 
     suspend fun getPointsForSession(sessionId: Long): List<TrackPoint> =
         pointDao.getForSession(sessionId)

@@ -18,6 +18,15 @@ interface TrackSessionDao {
     @Query("SELECT * FROM track_sessions WHERE id = :id")
     suspend fun getById(id: Long): TrackSession?
 
+    /**
+     * 悬挂会话：`endTime IS NULL` 表示"正在记录"，但进程可能是上次被系统杀掉的残留。
+     *
+     * 调用时机只有 App 启动（此时本进程还没有 Service 在跑，所以不会有误判）。
+     * 按开始时间倒序，正常最多命中 1 条；出现多条说明历史上有过多次异常退出。
+     */
+    @Query("SELECT * FROM track_sessions WHERE endTime IS NULL ORDER BY startTime DESC")
+    suspend fun unfinished(): List<TrackSession>
+
     @Query("SELECT * FROM track_sessions ORDER BY startTime DESC")
     fun observeAll(): Flow<List<TrackSession>>
 
@@ -35,6 +44,7 @@ interface TrackSessionDao {
                s.endTime AS endTime,
                s.totalDistanceMeters AS totalDistanceMeters,
                s.name AS name,
+               s.pausedMs AS pausedMs,
                (SELECT COUNT(*) FROM track_points p WHERE p.sessionId = s.id) AS pointCount
         FROM track_sessions s
         WHERE s.endTime IS NOT NULL
@@ -43,12 +53,12 @@ interface TrackSessionDao {
     )
     fun observeCompleted(): Flow<List<TrackSummary>>
 
-    /** 写入会话的最终距离和结束时间。 */
+    /** 写入会话的最终距离、结束时间和累计暂停时长。 */
     @Query(
-        "UPDATE track_sessions SET endTime = :endTime, totalDistanceMeters = :distance " +
-                "WHERE id = :id"
+        "UPDATE track_sessions SET endTime = :endTime, totalDistanceMeters = :distance, " +
+                "pausedMs = :pausedMs WHERE id = :id"
     )
-    suspend fun finalize(id: Long, endTime: Long, distance: Float)
+    suspend fun finalize(id: Long, endTime: Long, distance: Float, pausedMs: Long)
 
     @Query("DELETE FROM track_sessions WHERE id = :id")
     suspend fun deleteById(id: Long)

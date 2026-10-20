@@ -146,9 +146,28 @@
    两处必须一致；导出目录 `cacheDir/gpx/` 与 `res/xml/file_paths.xml` 的 `<cache-path>` 对应。
 4. GPX 时间写 **UTC + `Z`**（本地时区会让别的软件算错配速）；坐标 6 位小数；
    海拔 0 不写 `<ele>`（高德拿不到海拔时给 0）。
-5. 单测基线：`./gradlew :app:testDebugUnitTest` → **31 用例全绿**
-   （CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9）。
-   改坐标、GPX 或导入转换逻辑必须保持全绿。
+5. 单测基线：`./gradlew :app:testDebugUnitTest` → **45 用例全绿**
+   （CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9 / TrackMetrics 7 / TrackClock 7）。
+   改坐标、GPX、距离规则或时长算法必须保持全绿。
+
+## 记录状态与时长（P2.2–2.4 产物，硬约束）
+
+1. **UI 判断"是否在记录"只看 `RecordingTrackState.current`（进程内），不要去查 DB**。
+   进程被杀后 DB 里会留 `endTime IS NULL` 的悬挂会话，查 DB 会永远显示"记录中"。
+   悬挂会话由 `SessionRecovery` 在 **Application.onCreate** 收尾（0 点删除 / 有点收尾保存）。
+2. **不要给悬挂会话做"继续记录"**：进程死后 GPS 已断，硬接会在轨迹里留跨公里直线。
+   现在的口径是"自动保存 + 提示一次"。
+3. **时长一律用 `activeDurationMs`（= endTime - startTime - pausedMs）**，
+   不要直接 `endTime - startTime`：暂停两小时的长椅休息会算进运动时长。
+   记录中的实时时长走 `TrackClock.activeElapsedMs()`。
+4. **时间基准：只有落库的 `TrackPoint.timestamp` 用 `System.currentTimeMillis()`**，
+   其余（间隔过滤、时长、看门狗）全用 `SystemClock.elapsedRealtime()`——用户改系统时间不能影响记录。
+5. **距离规则只有一份**：`util/TrackMetrics`（精度 > 30 m 或单段 > 500 m 不计）。
+   Service 累加、崩溃恢复重算、导入校验都调它，不要各写一套。
+6. Service 是 `START_NOT_STICKY` + `null intent → stopSelf`：别再改回 STICKY，
+   Android 14 上"重启后没在 5 秒内 startForeground"会 ANR。
+7. Service 每秒心跳（`tickerJob`）是"服务是否还活着"的唯一信号；
+   看门狗 `RecordingTrackState.clearIfStale()` **只清 UI 状态，绝不落库**（无法区分"死"和"被冻"）。
 
 ## Room 表结构与迁移（P2.1 产物，硬约束）
 
@@ -161,8 +180,11 @@
 - **禁止 `fallbackToDestructiveMigration()`**：那等于用户轨迹全丢。宁可启动时报错让人发现。
 - `exportSchema=true` 是 2026-10-20 打开的，`1.json` 是当时固化的 v1 基线。
   历史 schema 补不回来，所以**改表前先确认当前版本 json 已在仓库里**。
-- 当前 v2 只加了一列：`track_sessions.name TEXT`（可空）。**不要**给已有列改类型或加 NOT NULL，
+- 当前 **v3**：v2 加了 `track_sessions.name TEXT`（可空），v3 加了
+  `pausedMs INTEGER NOT NULL DEFAULT 0`（累计暂停时长）。**不要**给已有列改类型，
   SQLite 的 ALTER 不支持，得走"建新表 → 拷数据 → 重命名"那一套。
+- 加 NOT NULL 列必须带 `DEFAULT`（SQLite 的 ALTER 要求），且 entity 里**不要**写
+  `@ColumnInfo(defaultValue=...)`，否则 Room 会拿它跟实际库比对，老库对不上就崩。
 - 列表的点数用 `TrackSummary`（非 @Entity 的 POJO）：SQL 里**必须显式 `AS` 别名**，
   Room 靠列名映射。不要在 LazyColumn 里逐项查库（N+1）。
 - 新增查询后看一遍编译日志：Room 在编译期校验 SQL 列与返回类型是否匹配，编译过 = 映射对。
@@ -176,7 +198,9 @@
 | `ui/tabs/MainTabsScreen.kt` | 主框架：Scaffold + 内层 NavHost（home/routes/gear/profile/tracks）+ 底栏 |
 | `ui/tracks/TrackListScreen.kt` | 历史列表：空态 / 长按删除 / SAF 导入 GPX |
 | `ui/tracks/TrackDetailScreen.kt` | 详情回看：地图 autoZoom + 起终点 marker + 统计卡 + 导出 |
-| `data/db/TrackSummary.kt` | 列表投影（会话 + pointCount），非 @Entity |
+| `data/SessionRecovery.kt` | 启动时收尾悬挂会话（0 点删 / 有点存），并推 `orphaned` 给记录页提示 |
+| `util/TrackMetrics.kt` | 距离规则（精度 30m / 单段 500m）+ `TrackClock`（扣暂停的活动时长） |
+| `data/db/TrackSummary.kt` | 列表投影（会话 + pointCount + pausedMs），非 @Entity |
 | `export/GpxImport.kt` | 解析结果 → TrackPoint（纯计算，JVM 可测） |
 | `app/schemas/**/*.json` | Room 表结构存档，**随表结构变更一起提交** |
 | `ui/components/AppBottomBar.kt` | 五槽底栏 + 凸起出发圆钮 + 记录中红点 |
@@ -187,7 +211,7 @@
 | `location/CityProvider.kt` | 从共享定位流取城市名（first{} + 缓存），首页「同城」用 |
 | `util/CoordTransform.kt` | GCJ-02 ↔ WGS-84（导出/导入的唯一转换点） |
 | `export/GpxWriter.kt` / `GpxParser.kt` / `GpxExporter.kt` | GPX 写出 / 解析 / 落盘 + 分享 |
-| `service/RecordingTrackService.kt` | 前台服务：订阅共享定位流 → 过滤 → 累计 → 落库 |
+| `service/RecordingTrackService.kt` | 前台服务：START/PAUSE/RESUME/STOP + 每秒心跳 + 通知动作按钮 → 过滤 → 累计 → 落库 |
 | `ui/map/MapViewWrapper.kt` | 地图路由入口（透传 track / showEndpoints / autoZoom） |
 | `ui/map/MapEngine.kt` / `AmapMapEngine.kt` | 引擎接口 + 高德实现（折线 / 起终点 marker / bbox 缩放 / 跟随） |
 | `ui/map/MapPoint.kt` | 与引擎无关的 GCJ-02 坐标点（业务层只认这个） |

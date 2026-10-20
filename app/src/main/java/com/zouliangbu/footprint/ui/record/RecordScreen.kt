@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.AlertDialog
@@ -87,7 +88,10 @@ fun RecordScreen(
     val sessions by vm.sessions.collectAsStateWithLifecycle()
     // 实时轨迹：Service 每落一个点推一次，ViewModel 追加后这里跟着重组，地图折线就"长"出来。
     val track by vm.track.collectAsStateWithLifecycle()
+    // 上次被系统杀掉留下的悬挂会话：App 启动时已自动收尾保存，这里只提示一次。
+    val recovered by vm.orphaned.collectAsStateWithLifecycle()
     val isRecording = snapshot != null
+    val isPaused = snapshot?.paused == true
 
     // 摘要对话框：service stop 后展示
     var summaryFor by remember { mutableStateOf<Long?>(null) }
@@ -173,11 +177,27 @@ fun RecordScreen(
                         fontWeight = FontWeight.Bold
                     )
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        "时长 " + TimeFmt.elapsed(s.elapsedMs),
-                        color = Color.White,
-                        fontSize = 16.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "时长 " + TimeFmt.elapsed(s.elapsedMs),
+                            color = Color.White,
+                            fontSize = 16.sp
+                        )
+                        // 暂停时给一个明显标识：否则用户看到时长不走会以为是卡死。
+                        if (s.paused) {
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                "已暂停",
+                                color = Color(0xFF1B1B1B),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFFFC107))
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -192,8 +212,8 @@ fun RecordScreen(
             tonalElevation = 8.dp
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
-                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!isRecording) {
@@ -229,13 +249,39 @@ fun RecordScreen(
                         Text("开始记录", fontSize = 18.sp)
                     }
                 } else {
+                    // 暂停 / 继续（P2.4）：暂停期间不采点、不计距离、不计时长，
+                    // 恢复后同一条会话继续写，轨迹不会被拆成两条。
+                    Button(
+                        onClick = {
+                            val intent = if (isPaused) {
+                                RecordingTrackService.resumeIntent(context)
+                            } else {
+                                RecordingTrackService.pauseIntent(context)
+                            }
+                            // 服务已在前台运行，startService 即可（不需要 startForegroundService）。
+                            context.startService(intent)
+                        },
+                        modifier = Modifier.weight(1f).height(56.dp),
+                        shape = RoundedCornerShape(28.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF37474F),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            if (isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                            contentDescription = null
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (isPaused) "继续" else "暂停", fontSize = 16.sp)
+                    }
                     Button(
                         onClick = {
                             val sid = snapshot?.sessionId
                             context.startService(RecordingTrackService.stopIntent(context))
                             summaryFor = sid
                         },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
+                        modifier = Modifier.weight(1f).height(56.dp),
                         shape = RoundedCornerShape(28.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.error
@@ -243,11 +289,47 @@ fun RecordScreen(
                     ) {
                         Icon(Icons.Default.Stop, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("停止记录", fontSize = 18.sp)
+                        Text("停止记录", fontSize = 16.sp)
                     }
                 }
             }
         }
+    }
+
+    // 上次记录被系统杀掉：已自动收尾保存，这里只提示一次（P2.2）。
+    // 选"继续记录"是不可行的——进程死后 GPS 采集已断，硬接上会在轨迹里留一个跨公里的空洞。
+    recovered.firstOrNull()?.let { item ->
+        AlertDialog(
+            onDismissRequest = { vm.dismissRecovery() },
+            title = { Text("上次记录异常中断") },
+            text = {
+                Column {
+                    Text(
+                        "检测到一条未正常结束的记录（${TimeFmt.distance(item.distanceMeters)} · " +
+                                "${item.pointCount} 个点），已自动保存到「我的记录」。"
+                    )
+                    if (recovered.size > 1) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "共 ${recovered.size} 条，其余同样已保存。",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        vm.dismissRecovery()
+                        onOpenDetail(item.sessionId)
+                    }
+                ) { Text("查看轨迹") }
+            },
+            dismissButton = {
+                TextButton(onClick = { vm.dismissRecovery() }) { Text("知道了") }
+            }
+        )
     }
 
     // 摘要对话框：service 结束后从 sessions 里拿最终数据
@@ -262,8 +344,21 @@ fun RecordScreen(
                 text = {
                     Column {
                         Text("距离：${TimeFmt.distance(session.totalDistanceMeters)}")
-                        val durationMs = (session.endTime ?: System.currentTimeMillis()) - session.startTime
-                        Text("时长：${TimeFmt.elapsed(durationMs)}")
+                        // 用 activeDurationMs（已扣暂停）：暂停期间不该算进运动时长。
+                        // endTime 还没落库时（刚点停止、Room 还没推新值）按当前时间估算，
+                        // 否则摘要卡会先闪一下 00:00 再跳正。
+                        val durationMs = if (session.endTime != null) {
+                            session.activeDurationMs
+                        } else {
+                            (System.currentTimeMillis() - session.startTime - session.pausedMs)
+                                .coerceAtLeast(0L)
+                        }
+                        Text(
+                            "时长：${TimeFmt.elapsed(durationMs)}" +
+                                    if (session.pausedMs > 0) {
+                                        "（暂停 ${TimeFmt.elapsed(session.pausedMs)}）"
+                                    } else ""
+                        )
                         Text(
                             "开始：${
                                 SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault())

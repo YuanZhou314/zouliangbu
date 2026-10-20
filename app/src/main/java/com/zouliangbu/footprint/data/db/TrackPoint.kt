@@ -13,7 +13,8 @@ import androidx.room.PrimaryKey
  * @property lng        经度（GCJ-02）
  * @property altitude   海拔（米）
  * @property timestamp  采样时刻（epoch millis）
- * @property accuracy   水平精度（米）。超过 30 米的点会被 service 丢弃。
+ * @property accuracy   水平精度（米）。超过 30 米的点**仍落库**（保证轨迹连续），但不计入距离，
+ *                      见 [com.zouliangbu.footprint.util.TrackMetrics]。
  */
 @Entity(
     tableName = "track_points",

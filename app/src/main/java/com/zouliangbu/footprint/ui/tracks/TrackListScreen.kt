@@ -189,7 +189,8 @@ private fun TrackRow(
 ) {
     val dateStr = formatDate(track.startTime)
     val title = track.name ?: dateStr
-    val durationMs = ((track.endTime ?: track.startTime) - track.startTime).coerceAtLeast(0L)
+    // 活动时长（已扣暂停）：暂停两小时的长椅休息不该算进"走了多久"。
+    val durationMs = track.activeDurationMs
 
     // 有名字时把日期挪到副行，避免同一天多条记录只看名字分不清时间。
     val meta = buildList {

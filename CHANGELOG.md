@@ -9,6 +9,65 @@
 
 ---
 
+## [2026-10-20] P2 开工：悬挂会话恢复 + Service/UI 一致 + 暂停继续（buildNumber=12）
+
+### 触发
+P1 八项清零后按 ROADMAP 顺序推进 **2.2 → 2.3 → 2.4**，顺手把 2.7（计时基准）一并修掉。
+
+### 产出
+
+| 文件 | 变更 |
+|---|---|
+| `util/TrackMetrics.kt` | 新增。距离规则（精度 30m / 单段 500m）+ `TrackClock.activeElapsedMs`（扣暂停）。纯函数，JVM 可测 |
+| `data/SessionRecovery.kt` | 新增。启动时扫 `endTime IS NULL`：0 点删除、有点收尾保存；结果推给 UI 提示 |
+| `data/db/TrackSession.kt` | 新增 `pausedMs`；派生属性 `activeDurationMs`（= end-start-paused） |
+| `data/db/AppDatabase.kt` | version=3 + `MIGRATION_2_3`（ALTER ADD COLUMN pausedMs INTEGER NOT NULL DEFAULT 0） |
+| `app/schemas/.../3.json` | 新 schema（相对 2.json 只多 pausedMs 一列） |
+| `data/db/TrackSessionDao.kt` | `unfinished()`；`finalize()` 增加 pausedMs；`observeCompleted` 投影带 pausedMs |
+| `data/db/TrackSummary.kt` | 加 `pausedMs` + `activeDurationMs` |
+| `data/RecordingTrackState.kt` | Snapshot 加 `paused` / `updatedAtElapsed`；新增 `clearIfStale()` |
+| `service/RecordingTrackService.kt` | 重写：ACTION_PAUSE/RESUME、每秒心跳、通知动作按钮、`START_NOT_STICKY`、null intent 自杀、间隔过滤改单调时钟 |
+| `FootprintApp.kt` | 启动时在 IO 线程跑一次 `SessionRecovery.run()`（appScope） |
+| `ui/record/RecordViewModel.kt` | `orphaned` 提示流、看门狗（心跳超时清 UI）、`dismissRecovery()` |
+| `ui/record/RecordScreen.kt` | 暂停/继续按钮、「已暂停」角标、恢复提示对话框、摘要时长扣暂停 |
+| `ui/tracks/Track{List,Detail}Screen.kt` | 时长/均速统一用 `activeDurationMs`；详情页显示「含暂停 xx」 |
+| `app/src/test/.../TrackMetricsTest.kt` | 新增 7 用例 |
+| `app/src/test/.../TrackClockTest.kt` | 新增 7 用例 |
+
+### 关键决策
+
+1. **悬挂会话不做「继续记录」，改为自动收尾保存**（**对 ROADMAP 2.2 的有意偏离**）。
+   ROADMAP 原写「有点就问『继续/结束』」。实际做不下去：进程死后 GPS 采集已断，
+   继续写会在轨迹里留一个跨几公里的空洞（时间断层 + 直线跳变），比丢一次记录更难解释。
+   现在的做法是：用**最后一个点的时间**当结束时间、按统一规则重算距离，收尾成一条正常历史记录，
+   并在记录页提示一次「上次记录异常中断，已保存」。用户随时能看到、导出、删除。
+2. **看门狗只清 UI 状态，绝不落库**。光凭「心跳停了」分不清「Service 真死了」和
+   「被国产 ROM 冻了一分钟」。在活着的记录脚下 finalize，会把一条轨迹拆成两段。
+   落库收尾只在 Application 启动时做——那时能确定本进程没有任何 Service 在跑。
+3. **暂停不新建 session**（ROADMAP 明确要求的）。同一条会话继续写；恢复后把 `lastPoint`
+   置空，于是**暂停期间走的路不计距离**（地图上的直线连接是坐标系层面的必然结果）。
+4. **`START_STICKY` → `START_NOT_STICKY`**。重启时拿不到 sessionId，起来只能空跑，
+   还会在 Android 14 上因「5 秒内没 startForeground」被判 ANR。恢复逻辑上移到 Application。
+5. **加每秒心跳**。原来时长只在新点落库时更新——站在山顶不动看风景，计时器会停住，
+   用户以为记录卡死。心跳顺带成了「Service 是否还活着」的唯一信号。
+6. **`SessionRecovery` 跳过本进程刚建的会话**（`startTime >= processStartWallMs`）：
+   恢复是异步跑的，手速快的用户可能在它查库前就点了开始记录，那条新会话不能被当残留收尾。
+
+### 验证
+
+- `testDebugUnitTest` **45 用例全绿**（原 31 + TrackMetrics 7 + TrackClock 7）
+- 迁移用 SQLite 实测：按 2.json 建表 → 插入老数据 → 跑 `MIGRATION_2_3` 的 ALTER →
+  与 3.json 逐列比对（列齐、affinity/notNull 一致），老行 `pausedMs` 自动为 0
+- `compileDebugKotlin` 零 warning；`assembleDebug` → **0.1.0.000012 / 53.8 MB**
+
+### 未验证 / 已知限制
+
+- **迁移和暂停都还没上真机**。装机会从 v1/v2 库升到 v3，若启动崩看 logcat 的 `Room cannot verify`
+- 通知上的「暂停/继续/停止」动作按钮，部分 ROM 的锁屏通知可能不展示（系统限制），正文仍可点进 App
+- 2.5 抽稀 / 2.6 写点批量 / 2.8 WakeLock 仍未做
+
+---
+
 ## [2026-10-20] P1 收尾：历史列表 + 详情回看 + GPX 导入（buildNumber=8）
 
 ### 触发

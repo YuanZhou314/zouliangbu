@@ -132,12 +132,17 @@ fun TrackDetailScreen(
 
         StatsPanel(
             distanceText = session?.let { TimeFmt.distance(it.totalDistanceMeters) } ?: "—",
-            durationText = session?.let {
-                TimeFmt.elapsed(((it.endTime ?: it.startTime) - it.startTime).coerceAtLeast(0L))
-            } ?: "—",
+            // 活动时长（扣暂停）；暂停信息单独显示，避免用户以为时长算错了。
+            durationText = session?.let { TimeFmt.elapsed(it.activeDurationMs) } ?: "—",
             pointText = "${ui.rawPointCount}",
-            speedText = averageSpeedText(session?.totalDistanceMeters ?: 0f, session?.startTime, session?.endTime),
-            startedAt = session?.let { formatDate(it.startTime) } ?: "—"
+            speedText = averageSpeedText(
+                session?.totalDistanceMeters ?: 0f,
+                session?.activeDurationMs ?: 0L
+            ),
+            startedAt = session?.let { formatDate(it.startTime) } ?: "—",
+            pausedText = session?.pausedMs
+                ?.takeIf { it > 0L }
+                ?.let { "含暂停 ${TimeFmt.elapsed(it)}" }
         )
     }
 }
@@ -148,7 +153,8 @@ private fun StatsPanel(
     durationText: String,
     pointText: String,
     speedText: String,
-    startedAt: String
+    startedAt: String,
+    pausedText: String?
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -173,7 +179,9 @@ private fun StatsPanel(
             }
             Spacer(Modifier.height(12.dp))
             Text(
-                "开始于 $startedAt",
+                // 暂停过的轨迹在「时长」里已扣掉暂停，不说明一句会让人以为时长算错了。
+                if (pausedText != null) "开始于 $startedAt · $pausedText"
+                else "开始于 $startedAt",
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
@@ -193,10 +201,9 @@ private fun StatCell(value: String, label: String) {
 }
 
 /** 平均速度 km/h。时长为 0 或异常时给 "—"，不显示 Infinity。 */
-private fun averageSpeedText(meters: Float, start: Long?, end: Long?): String {
-    if (start == null || end == null || end <= start) return "—"
-    val hours = (end - start) / 3_600_000.0
-    if (hours <= 0.0 || meters <= 0f) return "—"
+private fun averageSpeedText(meters: Float, activeDurationMs: Long): String {
+    if (activeDurationMs <= 0L || meters <= 0f) return "—"
+    val hours = activeDurationMs / 3_600_000.0
     val kmh = (meters / 1000.0) / hours
     return if (kmh.isFinite()) "%.1f km/h".format(kmh) else "—"
 }

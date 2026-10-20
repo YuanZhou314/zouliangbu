@@ -1,8 +1,10 @@
 package com.zouliangbu.footprint
 
 import android.app.Application
+import android.util.Log
 import com.amap.api.location.AMapLocationClient
 import com.amap.api.maps.MapsInitializer
+import com.zouliangbu.footprint.data.SessionRecovery
 import com.zouliangbu.footprint.data.db.AppDatabase
 import com.zouliangbu.footprint.data.mock.MockFeedRepository
 import com.zouliangbu.footprint.data.mock.MockGearRepository
@@ -13,10 +15,16 @@ import com.zouliangbu.footprint.data.repo.RouteRepository
 import com.zouliangbu.footprint.data.repo.TrackRepository
 import com.zouliangbu.footprint.location.CityProvider
 import com.zouliangbu.footprint.location.LocationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import java.io.File
 
 class FootprintApp : Application() {
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     val database: AppDatabase by lazy { AppDatabase.get(this) }
     val repository: TrackRepository by lazy { TrackRepository(database) }
@@ -52,6 +60,27 @@ class FootprintApp : Application() {
             userAgentValue = packageName
             // 瓦片缓存写到 app 私有目录，避开 WRITE_EXTERNAL_STORAGE 权限（minSdk 26 仍可能命中）。
             osmdroidTileCache = File(filesDir, "osmdroid").apply { mkdirs() }
+        }
+
+        // ====== 悬挂会话恢复（P2.2）======
+        // 进程可能是上次记录中被系统杀掉后重建的：DB 里会留下 endTime = NULL 的会话，
+        // 它既不在历史列表里（列表只查已结束的），也永远不会自己结束。
+        // 这里在 IO 线程扫一遍并收尾；结果通过 SessionRecovery.orphaned 交给记录页提示。
+        //
+        // 为什么放 Application 而不是记录页：用户可能几周都不打开记录页，
+        // 但数据必须在他第一次启动 App 时就落定，否则那条轨迹等于丢了。
+        appScope.launch {
+            runCatching { SessionRecovery.run(repository) }
+                .onSuccess { handled ->
+                    if (handled.isNotEmpty()) {
+                        Log.i(
+                            "FootprintApp",
+                            "recovered ${handled.size} dangling session(s): " +
+                                    handled.joinToString { "id=${it.sessionId} points=${it.pointCount}" }
+                        )
+                    }
+                }
+                .onFailure { Log.e("FootprintApp", "SessionRecovery failed", it) }
         }
     }
 }
