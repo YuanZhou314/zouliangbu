@@ -115,8 +115,15 @@ fun TrackListScreen(
                             strokeWidth = 2.dp
                         )
                     } else {
-                        IconButton(onClick = { picker.launch(arrayOf("*/*")) }) {
-                            Icon(Icons.Filled.FileDownload, contentDescription = "导入 GPX")
+                        // 光一个下载图标语义模糊，加"导入"二字：这是本页的主要动作之一。
+                        TextButton(onClick = { picker.launch(arrayOf("*/*")) }) {
+                            Icon(
+                                Icons.Filled.FileDownload,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("导入")
                         }
                     }
                 },
