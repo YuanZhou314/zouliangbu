@@ -127,6 +127,65 @@ class ContentApiTest {
                 .andExpect(jsonPath("$.data[7].id").value("g8"));
     }
 
+    // ---------- 契约完整性：字段增删必须让测试失败 ----------
+    //
+    // 这组测试是补漏来的：FeedItem 曾经漏返回 coverStyle，
+    // 而 App 侧 `FeedItem.coverStyle: Int` **没有默认值**，
+    // kotlinx.serialization 遇到缺字段会直接抛 MissingFieldException（不会降级成 0）。
+    // 只看 HTTP 200 / 只看 jsonPath 里几个字段是查不出来的，
+    // 必须"数清字段个数 + 逐个点名"才能拦住。
+
+    @Test
+    @DisplayName("契约：feed 返回 App 需要的全部 8 个字段")
+    void feedItemCarriesAllAppRequiredFields() throws Exception {
+        mvc.perform(get("/api/v1/feed").param("size", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].length()").value(8))
+                .andExpect(jsonPath("$.data.items[0].id").exists())
+                .andExpect(jsonPath("$.data.items[0].title").exists())
+                .andExpect(jsonPath("$.data.items[0].author").exists())
+                .andExpect(jsonPath("$.data.items[0].likeCount").exists())
+                .andExpect(jsonPath("$.data.items[0].city").exists())
+                .andExpect(jsonPath("$.data.items[0].coverStyle").exists())
+                .andExpect(jsonPath("$.data.items[0].coverAspectRatio").exists())
+                // coverUrl 本期恒为 null，用 hasJsonPath 断言"字段在"而不是"值非空"
+                .andExpect(jsonPath("$.data.items[0].coverUrl").hasJsonPath());
+    }
+
+    @Test
+    @DisplayName("契约：route 返回 App 需要的全部 8 个字段")
+    void routeItemCarriesAllAppRequiredFields() throws Exception {
+        mvc.perform(get("/api/v1/routes"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.recommendations[0].length()").value(8))
+                .andExpect(jsonPath("$.data.recommendations[0].id").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].name").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].region").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].distanceKm").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].ascentMeters").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].coverStyle").exists())
+                .andExpect(jsonPath("$.data.recommendations[0].tags").isArray())
+                .andExpect(jsonPath("$.data.recommendations[0].coverUrl").hasJsonPath());
+    }
+
+    @Test
+    @DisplayName("契约：section 与 gear 字段齐全，subtitle 不能为 null")
+    void sectionAndGearCarryAllAppRequiredFields() throws Exception {
+        mvc.perform(get("/api/v1/routes"))
+                .andExpect(jsonPath("$.data.sections[0].length()").value(4))
+                .andExpect(jsonPath("$.data.sections[0].id").exists())
+                .andExpect(jsonPath("$.data.sections[0].title").exists())
+                // App 侧 RouteSection.subtitle 是非空 String，返回 null 会让解析抛异常
+                .andExpect(jsonPath("$.data.sections[0].subtitle").isString())
+                .andExpect(jsonPath("$.data.sections[0].routes").isArray());
+
+        mvc.perform(get("/api/v1/gear/categories"))
+                .andExpect(jsonPath("$.data[0].length()").value(3))
+                .andExpect(jsonPath("$.data[0].id").exists())
+                .andExpect(jsonPath("$.data[0].name").exists())
+                .andExpect(jsonPath("$.data[0].note").exists());
+    }
+
     @Test
     @DisplayName("参数越界返回 400 而非 500")
     void outOfRangeSizeIsBadRequest() throws Exception {

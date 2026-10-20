@@ -160,12 +160,15 @@ public class ContentQueryService {
 
     private FeedItem toFeedItem(FeedPost p) {
         float ratio = p.getCoverAspectRatio() == null ? 1f : p.getCoverAspectRatio().floatValue();
+        // coverStyle：无真实封面图时，用 id 取模让客户端选择渐变色板（与 toRouteItem 保持一致）
+        int coverStyle = p.getId() == null ? 0 : (int) (p.getId() % 5);
         return new FeedItem(
                 String.valueOf(p.getId()),
                 p.getTitle(),
                 p.getAuthor(),
                 p.getLikeCount() == null ? 0 : p.getLikeCount(),
                 p.getCity(),
+                coverStyle,
                 p.getCoverUrl(),
                 ratio);
     }
