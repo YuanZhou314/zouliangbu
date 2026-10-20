@@ -1,0 +1,41 @@
+[Unit]
+Description=zouliangbu content API (Spring Boot)
+# 有 MySQL 再用 prod profile；没有就用 dev（H2 内存库 + Flyway 种子，只读内容场景够用）
+After=network-online.target mysqld.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=zlb
+Group=zlb
+WorkingDirectory=/opt/zouliangbu-server
+
+# JDK 17 路径按机器实际调整（arm64 / x86 均可，jar 内无原生库）
+Environment=JAVA_HOME=/usr/lib/jvm/temurin-17-jre
+Environment=TZ=Asia/Shanghai
+
+# 走 dev profile 时改这一行：SPRING_PROFILES_ACTIVE=dev
+Environment=SPRING_PROFILES_ACTIVE=prod
+Environment=DATABASE_URL=jdbc:mysql://127.0.0.1:3306/zouliangbu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+Environment=DATABASE_USER=zlb
+# 密码放这里会被 systemctl show 看到；更稳妥是 EnvironmentFile=/etc/zlb/db.env (chmod 600)
+Environment=DATABASE_PASSWORD=CHANGE_ME
+
+# 显式 --server.port，避免环境里残留 SERVER__PORT 之类变量改变端口
+ExecStart=/usr/lib/jvm/temurin-17-jre/bin/java \
+    -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError \
+    -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8 \
+    -jar /opt/zouliangbu-server/zouliangbu-server-0.1.0.jar --server.port=8080
+
+# 优雅停机：先 SIGTERM，Spring 会关闭线程池和连接池
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+Restart=on-failure
+RestartSec=5
+
+# 2G 内存小机器建议再收紧堆上限（MaxRAMPercentage 已按容器/机器内存算）
+# LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# 统一换行符，避免 Windows 上 checkout 后拿到 CRLF 导致：
+#   - run-dev.sh / gradlew 在 Mac / Linux 上报 "bad interpreter: ^M"
+#   - Dockerfile 里 COPY/ENTRYPOINT 的脚本行为异常
+* text=auto
+
+*.sh        text eol=lf
+gradlew     text eol=lf
+*.bash      text eol=lf
+Dockerfile  text eol=lf
+*.sql       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.kt        text eol=lf
+*.kts       text eol=lf
+*.java      text eol=lf
+*.md        text eol=lf
+
+# PowerShell 在 Windows 上用 CRLF 更稳妥
+*.ps1       text eol=crlf
+
+# 二进制不要做任何转换
+*.jar       binary
+*.apk       binary
+*.keystore  binary
+*.png       binary
+*.jpg       binary
+*.webp      binary

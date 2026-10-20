@@ -1,0 +1,15 @@
+# prod：MySQL 8。所有敏感项走环境变量，不落库不进 git。
+spring:
+  datasource:
+    url: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/zouliangbu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${DATABASE_USER:zlb}
+    password: ${DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+
+logging:
+  level:
+    root: INFO
+    com.zouliangbu.server: INFO
