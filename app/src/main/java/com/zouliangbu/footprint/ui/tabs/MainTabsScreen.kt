@@ -18,6 +18,8 @@ import com.zouliangbu.footprint.ui.gear.GearScreen
 import com.zouliangbu.footprint.ui.home.HomeScreen
 import com.zouliangbu.footprint.ui.navigation.AppRoute
 import com.zouliangbu.footprint.ui.navigation.BottomTabs
+import com.zouliangbu.footprint.offline.OfflineMapScreen
+import com.zouliangbu.footprint.ui.routes.RouteDetailScreen
 import com.zouliangbu.footprint.ui.profile.ProfileScreen
 import com.zouliangbu.footprint.ui.record.RecordScreen
 import com.zouliangbu.footprint.ui.routes.RoutesScreen
@@ -62,17 +64,29 @@ fun MainTabsScreen(
             modifier = Modifier.padding(inner)
         ) {
             composable(AppRoute.HOME) { HomeScreen() }
-            composable(AppRoute.ROUTES) { RoutesScreen() }
+            composable(AppRoute.ROUTES) { RoutesScreen(onOpenDetail = { tabNav.navigate("route/$it") }) }
             composable(AppRoute.GEAR) { GearScreen() }
             composable(AppRoute.PROFILE) {
                 // 「我的记录」是下钻页，不进 tab 栈：navigate 入栈，返回回到「我的」。
-                ProfileScreen(onOpenTracks = { tabNav.navigate(AppRoute.TRACKS) })
+                ProfileScreen(
+                    onOpenTracks = { tabNav.navigate(AppRoute.TRACKS) },
+                    onOpenOffline = { tabNav.navigate(AppRoute.OFFLINE) }
+                )
             }
             composable(AppRoute.TRACKS) {
                 TrackListScreen(
                     onBack = { tabNav.popBackStack() },
                     onOpenDetail = onOpenTrackDetail
                 )
+            }
+            // 离线地图管理（ROADMAP P4.2）：放在内层，属于「我的」下钻，保留底栏。
+            composable(AppRoute.OFFLINE) {
+                OfflineMapScreen(onBack = { tabNav.popBackStack() })
+            }
+            // 线路详情（ROADMAP P6 S5）
+            composable("route/{routeId}") { entry ->
+                val id = entry.arguments?.getString("routeId")?.toLongOrNull() ?: 0L
+                RouteDetailScreen(routeId = id, onBack = { tabNav.popBackStack() })
             }
         }
     }

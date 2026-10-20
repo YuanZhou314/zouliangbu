@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -19,6 +20,8 @@ import com.zouliangbu.footprint.MainActivity
 import com.zouliangbu.footprint.R
 import com.zouliangbu.footprint.data.RecordingTrackState
 import com.zouliangbu.footprint.data.db.TrackPoint
+import com.zouliangbu.footprint.notify.TrackAlerts
+import com.zouliangbu.footprint.util.Elevation
 import com.zouliangbu.footprint.util.TrackClock
 import com.zouliangbu.footprint.util.TrackMetrics
 import com.zouliangbu.footprint.util.TimeFmt
@@ -30,6 +33,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -65,6 +70,26 @@ class RecordingTrackService : Service() {
 
         /** 相邻两点的最小间隔。定位本身是 2s 一次，1s 只是防抖下限。 */
         private const val MIN_POINT_INTERVAL_MS = 1_000L
+
+        /**
+         * 落库缓冲的刷新间隔（毫秒，ROADMAP P2.6）。
+         *
+         * 取 5 秒：点本身 2 秒一个，5 秒攒 2–3 个点，fsync 次数降到 1/3；
+         * 同时最坏情况下 5 秒内的点会丢（进程被 kill 时），对「1 小时徒步丢 5 秒」可接受。
+         */
+        private const val FLUSH_INTERVAL_MS = 5_000L
+
+        /** 缓冲里攒到多少个点就立刻落库（不等定时器）。 */
+        private const val FLUSH_MAX_BATCH = 20
+
+        /**
+         * 唤醒锁的超时（毫秒）。
+         *
+         * 给一个上限是防漏释放：正常路径在 stopTracking / onDestroy 里 release，
+         * 但如果哪条异常路径漏了，超时能兜底把锁还回去（不至于永久耗电）。
+         * 取 12 小时：一整天连续记录也覆盖得到。
+         */
+        private const val WAKE_LOCK_TIMEOUT_MS = 12L * 60L * 60L * 1000L
 
         private const val NOTIF_CHANNEL = "track_recording"
         private const val NOTIF_ID = 0x701
@@ -102,6 +127,26 @@ class RecordingTrackService : Service() {
 
     private var collectJob: Job? = null
     private var tickerJob: Job? = null
+    private var flushJob: Job? = null
+
+    /**
+     * 待落库的点缓冲（ROADMAP P2.6）。
+     *
+     * **所有读写都在 [flushMutex] 保护下**：采集协程负责 add，定时 flush 协程负责取出并清空，
+     * 两者是不同协程、可能同时跑（Dispatchers.Default 多线程），不锁就是数据竞争
+     * （ArrayList 在并发 add/clear 下会丢点甚至抛 IndexOutOfBounds）。
+     */
+    private val pendingPoints = ArrayList<TrackPoint>()
+    private val flushMutex = Mutex()
+
+    /**
+     * 记录期间持有的唤醒锁（ROADMAP P2.8）。
+     *
+     * 息屏后 CPU 会进入休眠，GPS 回调被推迟，采样间隔从 2 秒拉长到几分钟。
+     * `PARTIAL_WAKE_LOCK` 只阻止休眠、不阻止屏幕熄灭，是前台服务的标准做法。
+     * 必须在 [onDestroy] 里释放，否则会漏电。
+     */
+    private var wakeLock: PowerManager.WakeLock? = null
 
     private val isPaused: Boolean get() = pauseStartedAt > 0L
     private val isTracking: Boolean get() = sessionId > 0L && collectJob != null
@@ -171,10 +216,85 @@ class RecordingTrackService : Service() {
         pausedMs = 0L
         pauseStartedAt = 0L
 
+        // 一次性通知 channel 建好（P5.1 / P5.2）。
+        TrackAlerts.ensureChannels(this)
+
         // 立刻给 UI 一个 Snapshot，后续每点 + 每秒心跳都会刷新。
         publishSnapshot()
+        acquireWakeLock()
         startCollecting()
         startTicker()
+        startFlushing()
+    }
+
+    /**
+     * 落库刷新循环（ROADMAP P2.6）。
+     *
+     * 每 [FLUSH_INTERVAL_MS] 把缓冲里的点一次性 insertAll。
+     * 攒够 [FLUSH_MAX_BATCH] 个点会立即触发一次，不必等定时器。
+     */
+    private fun startFlushing() {
+        flushJob?.cancel()
+        flushJob = scope.launch {
+            while (isActive) {
+                delay(FLUSH_INTERVAL_MS)
+                if (sessionId <= 0L) break
+                flushPendingPoints()
+            }
+        }
+    }
+
+    /**
+     * 把一个点放进缓冲。攒够 [FLUSH_MAX_BATCH] 个就立刻落库，不等定时器。
+     */
+    private suspend fun enqueuePoint(point: TrackPoint) {
+        val needFlush = flushMutex.withLock {
+            pendingPoints.add(point)
+            pendingPoints.size >= FLUSH_MAX_BATCH
+        }
+        if (needFlush) flushPendingPoints()
+    }
+
+    /** 把缓冲区里的点批量落库。 */
+    private suspend fun flushPendingPoints() {
+        val batch = flushMutex.withLock {
+            if (pendingPoints.isEmpty()) return@withLock emptyList()
+            val copy = pendingPoints.toList()
+            pendingPoints.clear()
+            copy
+        }
+        if (batch.isEmpty()) return
+        runCatching { app.repository.appendPoints(batch) }
+            .onFailure { Log.e(TAG, "flush ${batch.size} point(s) failed", it) }
+    }
+
+    /**
+     * 持有唤醒锁（ROADMAP P2.8）。
+     *
+     * `PARTIAL_WAKE_LOCK`：CPU 不休眠，但屏幕可以熄灭（用户该锁屏还是要锁屏）。
+     * `setReferenceCounted(false)`：我们自己 acquire/release 配对，不依赖引用计数。
+     * 拿不到锁不致命——只是息屏后采样会稀疏一点，不能因此让记录崩掉。
+     */
+    private fun acquireWakeLock() {
+        if (wakeLock?.isHeld == true) return
+        runCatching {
+            val pm = getSystemService(PowerManager::class.java) ?: return
+            val lock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "zouliangbu:track-recording"
+            ).apply {
+                setReferenceCounted(false)
+                acquire(WAKE_LOCK_TIMEOUT_MS)
+            }
+            wakeLock = lock
+        }.onFailure { Log.w(TAG, "acquire wake lock failed", it) }
+    }
+
+    /** 释放唤醒锁。 */
+    private fun releaseWakeLock() {
+        runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
+            .onFailure { Log.w(TAG, "release wake lock failed", it) }
+        wakeLock = null
     }
 
     private fun startCollecting() {
@@ -198,8 +318,46 @@ class RecordingTrackService : Service() {
                 if (sessionId <= 0L) break
                 publishSnapshot()
                 updateNotification()
+                checkAlerts()
             }
         }
+    }
+
+    /**
+     * 记录中的周期性提醒（ROADMAP P5.1 / P5.2）。
+     *
+     * 心跳每秒跑一次，提醒判定本身是幂等的（每会话最多一次），
+     * 所以放这里既省一条线程，又能保证是「一直在记录时」的实时判定。
+     */
+    private fun checkAlerts() {
+        val sid = sessionId
+        if (sid <= 0L) return
+        val now = SystemClock.elapsedRealtime()
+
+        // P5.1：超时未动。
+        val idleMs = if (lastPointElapsed > 0L) now - lastPointElapsed else 0L
+        if (TrackAlerts.shouldNotifyIdle(sid, idleMs, distanceMeters)) {
+            val minutes = idleMs / 60_000L
+            runCatching { TrackAlerts.notifyIdle(this, sid, minutes) }
+                .onFailure { Log.w(TAG, "notifyIdle failed", it) }
+        }
+
+        // P5.2：低电量。
+        val percent = batteryPercent()
+        if (percent >= 0 && TrackAlerts.shouldNotifyLowBattery(sid, percent)) {
+            runCatching { TrackAlerts.notifyLowBattery(this, sid, percent) }
+                .onFailure { Log.w(TAG, "notifyLowBattery failed", it) }
+        }
+    }
+
+    /** 读当前电量百分比（0..100），拿不到返回 -1。 */
+    private fun batteryPercent(): Int {
+        val intent = registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            ?: return -1
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        if (level < 0 || scale <= 0) return -1
+        return (level * 100) / scale
     }
 
     private suspend fun onLocation(loc: AMapLocation) {
@@ -230,7 +388,8 @@ class RecordingTrackService : Service() {
         }
 
         // 低质量点也落库，保持轨迹连续（精度已存进字段，后续统计可以据此降权）。
-        app.repository.appendPoint(point)
+        // 这里只入缓冲，不直接写库（ROADMAP P2.6）：逐点 insert = 逐次事务 + 逐次 fsync。
+        enqueuePoint(point)
         lastPoint = point
         lastPointElapsed = nowElapsed
         pointCount += 1
@@ -269,8 +428,12 @@ class RecordingTrackService : Service() {
         collectJob = null
         tickerJob?.cancel()
         tickerJob = null
+        flushJob?.cancel()
+        flushJob = null
+        releaseWakeLock()
 
         val sid = sessionId
+        if (sid > 0L) TrackAlerts.reset(sid)
         val endTime = System.currentTimeMillis()
         val distance = distanceMeters
         // 仍在暂停中就直接停止：这段没结束的暂停也要计进去，否则时长会多算。
@@ -285,8 +448,17 @@ class RecordingTrackService : Service() {
 
         scope.launch {
             if (sid > 0L) {
+                // 先把缓冲区里剩下的点冲掉，再收尾会话——顺序反了会丢最后几个点。
+                flushPendingPoints()
                 runCatching { app.repository.finalizeSession(sid, endTime, distance, totalPaused) }
                     .onFailure { Log.e(TAG, "finalizeSession failed session=$sid", it) }
+                // 爬升/下降：停止后对整条轨迹做中值滤波 + 阈值累加（ROADMAP P3.1）。
+                // 失败不影响主流程（爬升只是附加信息），只记日志。
+                runCatching {
+                    val points = app.repository.getPointsForSession(sid)
+                    val ascent = Elevation.ascentOf(points)
+                    app.repository.updateAscent(sid, ascent.ascentMeters, ascent.descentMeters)
+                }.onFailure { Log.w(TAG, "updateAscent failed session=$sid", it) }
             }
             withContext(Dispatchers.Main) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -398,6 +570,9 @@ class RecordingTrackService : Service() {
         super.onDestroy()
         collectJob?.cancel()
         tickerJob?.cancel()
+        flushJob?.cancel()
+        // 释放唤醒锁：漏了会一直耗电（ROADMAP P2.8）。
+        releaseWakeLock()
         scope.cancel()
     }
 }

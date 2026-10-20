@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Hiking
 import androidx.compose.material.icons.filled.Interests
 import androidx.compose.material.icons.filled.Map
@@ -55,6 +56,7 @@ import java.util.Locale
 @Composable
 fun ProfileScreen(
     onOpenTracks: () -> Unit,
+    onOpenOffline: () -> Unit = {},
     vm: ProfileViewModel = viewModel()
 ) {
     val stats by vm.stats.collectAsStateWithLifecycle()
@@ -171,6 +173,7 @@ fun ProfileScreen(
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
                     EntryCell(Icons.Filled.Map, "轨迹", null, onClick = onOpenTracks)
+                    EntryCell(Icons.Filled.Download, "离线地图", null, onClick = onOpenOffline)
                     EntryCell(Icons.Filled.Interests, "兴趣点", "开发中")
                     EntryCell(Icons.Filled.CloudOff, "云端照片", "开发中")
                     EntryCell(Icons.Filled.Person, "帖子", "开发中")
@@ -182,7 +185,7 @@ fun ProfileScreen(
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
         Spacer(Modifier.height(8.dp))
         Text(
-            "离线地图 / 排行榜 / 福利等更多功能开发中",
+            "排行榜 / 福利等更多功能开发中",
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),

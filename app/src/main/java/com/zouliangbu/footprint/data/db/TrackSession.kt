@@ -15,6 +15,10 @@ import androidx.room.PrimaryKey
  * @property pausedMs         累计暂停时长（毫秒）。v3 新增，默认 0。
  *                            **活动时长 = endTime - startTime - pausedMs**，
  *                            UI 展示时长/配速一律用这个公式，不要直接用 endTime - startTime。
+ * @property ascentMeters     累计爬升（米）。v4 新增，默认 0。
+ *                            由 [com.zouliangbu.footprint.util.Elevation] 算出，
+ *                            老记录为 0（没算过，不猜）。
+ * @property descentMeters    累计下降（米）。v4 新增，默认 0。
  */
 @Entity(tableName = "track_sessions")
 data class TrackSession(
@@ -23,7 +27,9 @@ data class TrackSession(
     val endTime: Long? = null,
     val totalDistanceMeters: Float = 0f,
     val name: String? = null,
-    val pausedMs: Long = 0L
+    val pausedMs: Long = 0L,
+    val ascentMeters: Double = 0.0,
+    val descentMeters: Double = 0.0
 ) {
     /** 活动时长（扣暂停）。endTime 为 null（记录中）时按 startTime 兜底返回 0。 */
     val activeDurationMs: Long

@@ -11,7 +11,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 轨迹数据不上云（本地优先），这里不涉及任何轨迹相关表。
  */
 @SpringBootApplication
-@MapperScan("com.zouliangbu.server.content.mapper")
+@MapperScan({"com.zouliangbu.server.content.mapper", "com.zouliangbu.server.route.mapper"})
 public class ServerApplication {
 
     public static void main(String[] args) {

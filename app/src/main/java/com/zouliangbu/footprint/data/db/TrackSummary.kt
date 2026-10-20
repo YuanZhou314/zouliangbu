@@ -9,6 +9,8 @@ package com.zouliangbu.footprint.data.db
  * 不是 @Entity——Room 会把它当普通 POJO 按列名映射，所以 SQL 里必须显式 `AS` 别名。
  *
  * @property pausedMs 累计暂停时长，展示时长时要从 (endTime - startTime) 里扣掉。
+ * @property ascentMeters 累计爬升（米），v4 起有值。
+ * @property descentMeters 累计下降（米），v4 起有值。
  */
 data class TrackSummary(
     val id: Long,
@@ -17,6 +19,8 @@ data class TrackSummary(
     val totalDistanceMeters: Float,
     val name: String?,
     val pausedMs: Long,
+    val ascentMeters: Double,
+    val descentMeters: Double,
     val pointCount: Int
 ) {
     /** 活动时长（扣暂停）。 */

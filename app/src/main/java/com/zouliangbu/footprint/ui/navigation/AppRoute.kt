@@ -19,6 +19,7 @@ object AppRoute {
     const val GEAR = "gear"
     const val PROFILE = "profile"
     const val TRACKS = "tracks"
+    const val OFFLINE = "offline"
 
     const val ARG_SESSION_ID = "sessionId"
     const val TRACK_DETAIL = "track/{$ARG_SESSION_ID}"

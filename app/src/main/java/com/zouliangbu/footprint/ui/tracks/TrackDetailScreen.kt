@@ -40,8 +40,12 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zouliangbu.footprint.data.AmapKey
+import com.zouliangbu.footprint.share.Share
+import com.zouliangbu.footprint.share.ShareCardRenderer
 import com.zouliangbu.footprint.ui.map.MapViewWrapper
+import com.zouliangbu.footprint.util.Pace
 import com.zouliangbu.footprint.util.TimeFmt
+import com.zouliangbu.footprint.util.TrackSplits
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -90,6 +94,37 @@ fun TrackDetailScreen(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
+            // P5.4：分享行程卡（拼一张图分享出去）。
+            IconButton(
+                onClick = {
+                    if (ui.session == null || ui.points.isEmpty()) {
+                        Toast.makeText(context, "这条记录还没有轨迹点，无法分享", Toast.LENGTH_SHORT).show()
+                        return@IconButton
+                    }
+                    val s = ui.session
+                    if (s == null) {
+                        Toast.makeText(context, "记录未加载", Toast.LENGTH_SHORT).show()
+                        return@IconButton
+                    }
+                    runCatching {
+                        val card = ShareCardRenderer.render(
+                            context = context,
+                            name = s.name,
+                            startTimeMs = s.startTime,
+                            distanceMeters = s.totalDistanceMeters.toDouble(),
+                            activeDurationMs = s.activeDurationMs,
+                            ascentMeters = ui.ascentMeters,
+                            trackPoints = ui.points
+                        )
+                        Share.shareImage(context, card, "我的行程卡")
+                    }.onFailure {
+                        Toast.makeText(context, "生成行程卡失败：" + (it.message ?: "未知错误"), Toast.LENGTH_SHORT).show()
+                    }
+                }
+            ) {
+                Icon(Icons.Filled.Share, contentDescription = "分享行程卡")
+            }
+            // 原有：导出 GPX。
             IconButton(
                 onClick = {
                     vm.exportGpx { intent ->
@@ -142,7 +177,10 @@ fun TrackDetailScreen(
             startedAt = session?.let { formatDate(it.startTime) } ?: "—",
             pausedText = session?.pausedMs
                 ?.takeIf { it > 0L }
-                ?.let { "含暂停 ${TimeFmt.elapsed(it)}" }
+                ?.let { "含暂停 ${TimeFmt.elapsed(it)}" },
+            ascentText = ascentText(ui.ascentMeters, ui.descentMeters),
+            paceText = paceText(ui.paceStats),
+            splits = ui.splits
         )
     }
 }
@@ -154,7 +192,10 @@ private fun StatsPanel(
     pointText: String,
     speedText: String,
     startedAt: String,
-    pausedText: String?
+    pausedText: String?,
+    ascentText: String,
+    paceText: String,
+    splits: List<TrackSplits.Split>
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -177,7 +218,16 @@ private fun StatsPanel(
                 StatCell(speedText, "平均速度")
                 StatCell(pointText, "轨迹点")
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(10.dp))
+            // 第二排：爬升/下降 + 配速（ROADMAP P3.1 / P3.2）
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                StatCell(ascentText, "累计爬升")
+                StatCell(paceText, "平均配速")
+            }
+            Spacer(Modifier.height(10.dp))
             Text(
                 // 暂停过的轨迹在「时长」里已扣掉暂停，不说明一句会让人以为时长算错了。
                 if (pausedText != null) "开始于 $startedAt · $pausedText"
@@ -186,6 +236,62 @@ private fun StatsPanel(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = TextAlign.Center
+            )
+            // 分段统计（ROADMAP P3.5）：每公里一行。
+            if (splits.isNotEmpty()) {
+                Spacer(Modifier.height(8.dp))
+                SplitList(splits)
+            }
+        }
+    }
+}
+
+/** 分段统计列表：每公里一段，最多显示 20 段（再长用户也看不过来）。 */
+@Composable
+private fun SplitList(splits: List<TrackSplits.Split>) {
+    val shown = splits.take(20)
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "分段",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Start
+        )
+        shown.forEach { split ->
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    if (split.partial) "第 ${split.index} 段（不足 1 km）" else "第 ${split.index} km",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                Text(
+                    buildString {
+                        append(TimeFmt.elapsed(split.durationMs))
+                        append(" · ")
+                        append("%.0f m".format(split.distanceM))
+                        if (split.ascentM >= 1.0) {
+                            append(" · ↑")
+                            append("%.0f m".format(split.ascentM))
+                        }
+                        split.paceSecPerKm?.let { append(" · ").append(formatPace(it)) }
+                    },
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        if (splits.size > shown.size) {
+            Text(
+                "仅显示前 ${shown.size} 段，共 ${splits.size} 段",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -198,6 +304,31 @@ private fun StatCell(value: String, label: String) {
         Spacer(Modifier.height(2.dp))
         Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * 爬升/下降展示。两者都为 0 时给 "—"（没有高程数据时不显示 0，免得像是"确实没爬"）。
+ */
+private fun ascentText(ascent: Double, descent: Double): String {
+    if (ascent <= 0.0 && descent <= 0.0) return "—"
+    return "↑%.0f ↓%.0f m".format(ascent, descent)
+}
+
+/** 平均配速（分/公里）。速度为 0 时给 "—"，不显示 Infinity。 */
+private fun paceText(stats: Pace.Stats): String {
+    val secPerKm = stats.averagePaceSecPerKm ?: return "—"
+    return formatPace(secPerKm)
+}
+
+/** 秒/公里 → m'ss" / h mm'ss"。 */
+private fun formatPace(secPerKm: Double): String {
+    if (!secPerKm.isFinite() || secPerKm <= 0.0) return "—"
+    val total = secPerKm.toInt()
+    val h = total / 3600
+    val m = (total % 3600) / 60
+    val sec = total % 60
+    return if (h > 0) "%d:%02d'%02d".format(h, m, sec)
+    else "%d'%02d".format(m, sec)
 }
 
 /** 平均速度 km/h。时长为 0 或异常时给 "—"，不显示 Infinity。 */

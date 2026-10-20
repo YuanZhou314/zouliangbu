@@ -27,8 +27,25 @@ class TrackRepository(private val db: AppDatabase) {
         pointDao.insert(point)
     }
 
+    /**
+     * 批量追加点（ROADMAP P2.6）。
+     *
+     * 记录过程中用这个而不是逐点 insert：每次 insert 都是一次独立事务 + 一次 fsync，
+     * 2 秒一个点、一小时 1800 次 fsync，耗电和卡顿都吃在这里。
+     * 一次性 insertAll 走一个事务，1800 次 fsync 变成 1 次。
+     */
+    suspend fun appendPoints(points: List<TrackPoint>) {
+        if (points.isEmpty()) return
+        pointDao.insertAll(points)
+    }
+
     suspend fun finalizeSession(id: Long, endTime: Long, distanceMeters: Float, pausedMs: Long) {
         sessionDao.finalize(id, endTime, distanceMeters, pausedMs)
+    }
+
+    /** 写入累计爬升 / 下降（v4）。停止后单独调，与 [finalizeSession] 解耦。 */
+    suspend fun updateAscent(id: Long, ascentMeters: Double, descentMeters: Double) {
+        sessionDao.updateAscent(id, ascentMeters, descentMeters)
     }
 
     // ===== 读取 =====

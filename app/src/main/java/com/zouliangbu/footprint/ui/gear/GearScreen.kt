@@ -34,6 +34,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -45,6 +49,8 @@ import androidx.compose.ui.unit.sp
 import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.model.GearCategory
 import com.zouliangbu.footprint.ui.theme.ForestGreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 装备页：分类宫格（本期不接商城，纯展示不可点）。
@@ -53,8 +59,13 @@ import com.zouliangbu.footprint.ui.theme.ForestGreen
 @Composable
 fun GearScreen() {
     val context = LocalContext.current
-    val categories = remember(context) {
-        (context.applicationContext as FootprintApp).gearRepository.categories()
+    // 接 Remote 后 categories() 会走网络（RemoteGearRepository 内部 runBlocking），
+    // 必须放 IO 线程，否则主线程 ANR。网络失败时 Remote 回退到本地 Mock，立即返回。
+    var categories by remember { mutableStateOf(emptyList<GearCategory>()) }
+    LaunchedEffect(Unit) {
+        categories = withContext(Dispatchers.IO) {
+            (context.applicationContext as FootprintApp).gearRepository.categories()
+        }
     }
 
     LazyVerticalGrid(

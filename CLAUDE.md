@@ -6,6 +6,85 @@
 ## 项目一句话
 极简户外 GPS 轨迹记录 Android App（最小化两步路）。Kotlin + Compose + 高德 + Room。
 
+## 验证纪律（用户明确要求，2026-10-20）
+**默认不测。** 用户自己会装包实测，助手不要把 token 烧在反复验证上。
+
+- 只有用户**明确说**「跑一下 / 验证 / 装模拟器」时才动手测，且**一轮测完就停**。
+- 一轮测试的默认范围：装包 → 启动 → 跑完一条主链路（记录→停止→列表→详情）→ 报结论。
+  不做像素采样、颜色统计、逐点 DB 遍历、多分支对比构建等**深挖式验证**。
+- **不要**为了「测全」而反复 build / 反复切分支重装 / 反复跑单测。一次够。
+- 测出 bug 直接改代码 + 改完**只做一次编译验证**，不要再来一轮全量回归。
+- 遇到需要长时间连续注入坐标才能推进的流程，**说明即可，不要自己模拟**。
+- 结论汇报用表格说清「测了什么 / 结果 / 没测什么」，不要贴大段 logcat。
+- 单元测试只在**改动了被测逻辑**时跑一次；不改逻辑就别跑。
+
+## 路线内容平台（2026-10-20，硬约束）
+
+从两步路导入路线：链接→抓取→审批→展示。开源使用，不盈利。
+
+### 架构
+- **抓取**：`TwoBuluClient`（`/api/proSpecial/routeDetails` 明文 + `/api/destintion/getRoutePoints` XOR 0x4B）
+- **坐标**：服务端 `CoordTransform.java`（Java 移植自 App 侧 `CoordTransform.kt`），WGS-84 → GCJ-02
+- **鉴权**：`AdminAuthInterceptor`（固定密码 → token，2h 过期），只拦 `/api/v1/admin/**`
+- **管理后台**：纯 HTML + 原生 JS（`resources/static/admin/`），零构建依赖
+- **数据**：V3 迁移 4 张新表（`route_detail` / `route_track_point` / `route_marker` / `route_submission`）
+
+### 必须记住
+1. **两步路轨迹接口是 XOR 0x4B 加密**，不是 TLS/JWT，是简单的字节混淆。
+2. **WGS-84 → GCJ-02 转换必须做**，不做会偏 300~500m（与 App 全链路 GCJ-02 对齐）。
+3. **Jackson 3（Spring Boot 4）包名是 `tools.jackson`**，不是 `com.fasterxml.jackson`。
+4. **管理后台密码在 `application.yml`**（`admin.password`），token 存内存 Map（2h TTL）。
+5. **正文 HTML 渲染**：App 侧只做极简去标签（`<p>`/`<br>`/`<li>`），不引富文本库。
+6. **开源合规**：详情页展示来源标注 + 免责声明，图片只存 URL 不复制。
+
+## P2.5–P6 实现记录（2026-10-20）
+
+本轮把 ROADMAP 的 P2 剩余三项、P3 全部、P4 全部、P5 全部、P6 S4 一次性做完，
+只做静态验证（编译 + 单测），未做真机/模拟器实测（用户明确说晚点再实测）。
+
+### 新增关键文件速查
+
+| 文件 | 作用 |
+|---|---|
+| `util/Polyline.kt` | Douglas-Peucker 抽稀（显式栈迭代，防 2 万点 StackOverflow） |
+| `util/Elevation.kt` | 中值滤波（FILTER_RADIUS=3）+ 累计爬升/下降（ASCENT_THRESHOLD_M=3.0） |
+| `util/Pace.kt` | 30s 滑窗配速/速度（WINDOW_MS=30_000） |
+| `util/TrackSplits.kt` | 每公里分段统计 |
+| `offline/OfflineRegion.kt` | 离线包元信息 + 清单数据类 |
+| `offline/OfflineRegionCatalog.kt` | 清单 JSON 解析（JVM 可测） |
+| `offline/OfflinePackageManager.kt` | 下载 + SHA-256 校验 + 存储 + 总量上限 |
+| `offline/OfflineTileSource.kt` | osmdroid 离线 provider（MapTileProviderArray） |
+| `offline/OfflineMapScreen.kt` / `OfflineMapViewModel.kt` | 离线包管理 UI（我的页入口） |
+| `notify/TrackAlerts.kt` | P5.1 超时未动 / P5.2 低电量提醒 |
+| `share/Share.kt` | P5.3 位置分享 + P5.4 图片分享（FileProvider） |
+| `share/ShareCardRenderer.kt` | P5.4 行程卡 PNG 渲染（640×960 纯 Canvas） |
+| `data/remote/ContentApiFactory.kt` | Retrofit 的 Remote*Repository（网络失败自动回退 Mock） |
+| `app/src/main/assets/offline/regions.json` | 内置兜底清单 |
+| `docs/offline-map-baseline-decision.md` | P4.4 底座评估结论文档 |
+
+### 必须记住的约束
+
+1. Polyline.simplify 的 keep 数组必须按点数分配：早期写死长度 3，超过 3 个点就 ArrayIndexOutOfBoundsException。
+   改成 BooleanArray(points.size) { it == 0 || it == points.size - 1 }。
+2. RecordingTrackService.pendingPoints 所有读写必须在 flushMutex 下：采集协程 add + flush 协程 drain 是并发的，
+   不锁会丢点甚至 IndexOutOfBoundsException。
+3. Room v4 迁移三步：AppDatabase.version = 4 + MIGRATION_3_4（ALTER TABLE ADD COLUMN ascentMeters/descentMeters 
+   REAL NOT NULL DEFAULT 0）+ app/schemas/.../4.json 必须提交。
+4. 离线包只对 osmdroid 分支生效：高德 MapView 不支持 MBTiles；UI 上已明示。
+5. MBTiles 打开用 MBTilesFileArchive.getDatabaseFileArchive(File)：构造器是 private，损坏的包抛 SQLiteException，
+   必须 try/catch 跳过该包。
+6. kotlinx-serialization 而不是 Gson；converter 走 com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter。
+7. Remote*Repository 网络失败必须回退到 Mock（在 flow 里 collect fallback）：UI 零改动，离线不白屏。
+8. P4.1 的 WorkManager 断点续传未做：目前用 viewModelScope，离开页面下载会中断，需后续改 WorkManager + .part + Range。
+9. P3.4 DEM 离线高程未做（可选增强，可延后）。
+10. P6 S5 部署（Docker Compose + nginx + MySQL）未做——需要运维环境，不在本轮范围。
+
+### 单测基线
+
+- 本轮前：45 用例（CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9 / TrackMetrics 7 / TrackClock 7）。
+- 本轮新增：PolylineTest / ElevationTest / PaceTest / TrackSplitsTest 共 22 用例。
+- 当前：64 用例全绿。改抽稀、爬升、配速、分段任一逻辑，跑 testDebugUnitTest 保持全绿。
+
 ## 双轨地图架构（关键，本次会话产物）
 地图入口 `ui/map/MapViewWrapper.kt`，按 `data/AmapKey.kt::isConfigured()` 路由：
 

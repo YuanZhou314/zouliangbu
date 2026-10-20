@@ -1,0 +1,78 @@
+{
+  "version": "2026-10-20",
+  "note": "内置兜底清单。真实清单由服务端下发，本文件仅供离线/开发期使用。url 指向 MBTiles 文件，坐标系统一 GCJ-02。",
+  "regions": [
+    {
+      "id": "zj",
+      "name": "浙江省",
+      "group": "华东",
+      "url": "https://tiles.example.com/offline/zj.mbtiles",
+      "size": 134217728,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 27.0, "minLng": 118.0, "maxLat": 31.2, "maxLng": 123.0 },
+      "minZoom": 6,
+      "maxZoom": 14
+    },
+    {
+      "id": "js",
+      "name": "江苏省",
+      "group": "华东",
+      "url": "https://tiles.example.com/offline/js.mbtiles",
+      "size": 167772160,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 30.7, "minLng": 116.4, "maxLat": 35.3, "maxLng": 121.9 },
+      "minZoom": 6,
+      "maxZoom": 14
+    },
+    {
+      "id": "zj-hangzhou",
+      "name": "杭州市",
+      "group": "华东",
+      "url": "https://tiles.example.com/offline/hangzhou.mbtiles",
+      "size": 41943040,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 29.2, "minLng": 118.3, "maxLat": 30.6, "maxLng": 120.6 },
+      "minZoom": 8,
+      "maxZoom": 15
+    },
+    {
+      "id": "sc",
+      "name": "四川省",
+      "group": "西南",
+      "url": "https://tiles.example.com/offline/sc.mbtiles",
+      "size": 209715200,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 26.0, "minLng": 97.3, "maxLat": 34.3, "maxLng": 108.5 },
+      "minZoom": 6,
+      "maxZoom": 14
+    },
+    {
+      "id": "xj",
+      "name": "新疆维吾尔自治区",
+      "group": "西北",
+      "url": "https://tiles.example.com/offline/xj.mbtiles",
+      "size": 314572800,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 34.3, "minLng": 73.5, "maxLat": 49.2, "maxLng": 96.4 },
+      "minZoom": 5,
+      "maxZoom": 13
+    },
+    {
+      "id": "lj",
+      "name": "拉萨市",
+      "group": "西南",
+      "url": "https://tiles.example.com/offline/lhasa.mbtiles",
+      "size": 31457280,
+      "sha256": "",
+      "version": "2026-10-01",
+      "bounds": { "minLat": 29.3, "minLng": 89.8, "maxLat": 31.0, "maxLng": 92.5 },
+      "minZoom": 8,
+      "maxZoom": 15
+    }
+  ]
+}

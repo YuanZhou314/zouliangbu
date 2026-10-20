@@ -96,7 +96,10 @@ fun AmapMapView(
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_CREATE -> mapView.onCreate(null)
+                // onCreate 已在 createMapView() 里调用过（否则 engine 拿不到 AMap 实例）。
+                // MapView.onCreate 内部会 addView 它的渲染子 View，第二次调用会抛
+                // "The specified child already has a parent"。
+                // LifecycleRegistry 在 addObserver 时会补发当前状态，ON_RESUME 一定能收到。
                 Lifecycle.Event.ON_RESUME -> {
                     mapView.onResume()
                     mapView.map.run {
@@ -108,7 +111,7 @@ fun AmapMapView(
                     mapView.map.setMyLocationEnabled(false)
                     mapView.onPause()
                 }
-                Lifecycle.Event.ON_DESTROY -> mapView.onDestroy()
+                // onDestroy 交给 onDispose 统一处理，避免与下面的 mapView.onDestroy() 重复调用。
                 else -> Unit
             }
         }
@@ -143,6 +146,8 @@ fun AmapMapView(
             followJob.cancel()
             source.destroy()
             scope.cancel()
+            // MapView 的 onDestroy 只能调一次：这里统一收口（Compose 销毁与 Activity 销毁
+            // 都会走到这里，重复调用会触发高德内部 view 移除异常）。
             mapView.onDestroy()
         }
     }

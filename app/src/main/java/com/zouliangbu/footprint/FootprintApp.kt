@@ -13,6 +13,9 @@ import com.zouliangbu.footprint.data.repo.FeedRepository
 import com.zouliangbu.footprint.data.repo.GearRepository
 import com.zouliangbu.footprint.data.repo.RouteRepository
 import com.zouliangbu.footprint.data.repo.TrackRepository
+import com.zouliangbu.footprint.data.remote.RemoteFeedRepository
+import com.zouliangbu.footprint.data.remote.RemoteGearRepository
+import com.zouliangbu.footprint.data.remote.RemoteRouteRepository
 import com.zouliangbu.footprint.location.CityProvider
 import com.zouliangbu.footprint.location.LocationProvider
 import kotlinx.coroutines.CoroutineScope
@@ -35,10 +38,12 @@ class FootprintApp : Application() {
     /** 城市提供者：从共享定位流取城市名（首页「同城」用），带缓存。 */
     val cityProvider: CityProvider by lazy { CityProvider(this, locationProvider) }
 
-    // ====== 内容数据仓库（本期 Mock；接后台时只改这里的实现类，UI 零改动） ======
-    val feedRepository: FeedRepository by lazy { MockFeedRepository() }
-    val routeRepository: RouteRepository by lazy { MockRouteRepository() }
-    val gearRepository: GearRepository by lazy { MockGearRepository() }
+    // ====== 内容数据仓库（P6 S4：已接 Retrofit，Remote 网络失败自动回退 Mock） ======
+    // 切换只在这里：Mock → Remote。Remote*Repository 内部包住 Mock 作 fallback，
+    // 服务端不可达时 UI 依然能拿到本地数据，不白屏。
+    val feedRepository: FeedRepository by lazy { RemoteFeedRepository(MockFeedRepository()) }
+    val routeRepository: RouteRepository by lazy { RemoteRouteRepository(MockRouteRepository()) }
+    val gearRepository: GearRepository by lazy { RemoteGearRepository(MockGearRepository()) }
 
     override fun onCreate() {
         super.onCreate()

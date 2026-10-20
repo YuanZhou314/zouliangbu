@@ -7,4 +7,6 @@
 -->
 <paths>
     <cache-path name="gpx" path="gpx/" />
+    <!-- 行程卡分享图（share/ShareCardRenderer）写在 cacheDir 根目录，需单独授权。 -->
+    <cache-path name="share_card" path="." />
 </paths>

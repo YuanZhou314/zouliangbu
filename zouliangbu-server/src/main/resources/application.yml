@@ -18,6 +18,10 @@ mybatis-plus:
   global-config:
     banner: false
 
+admin:
+  password: zouliangbu-admin
+  token-ttl-hours: 2
+
 logging:
   level:
     root: INFO

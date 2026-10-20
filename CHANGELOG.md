@@ -9,6 +9,121 @@
 
 ---
 
+## [2026-10-20] 路线内容平台：两步路链接导入 + 审批 + 管理后台 + 线路详情页
+
+### 功能
+- **用户提交路线链接**（App 线路页"导入路线"按钮）→ 粘贴两步路 URL → 提交
+- **管理后台**（`/admin/`）：登录（固定密码）→ 审批队列（待审批/已上线/已驳回）→ 通过触发抓取
+- **两步路抓取**：`/api/proSpecial/routeDetails`（明文）+ `/api/destintion/getRoutePoints`（XOR 0x4B）
+- **坐标转换**：WGS-84 → GCJ-02（服务端 Java 版 CoordTransform，与 App 侧算法一致）
+- **线路详情页**（App）：地图轨迹 + 标注点 + 统计卡 + 正文渲染 + 来源标注
+- **管理员鉴权**：固定密码（`application.yml` 里 `admin.password`）→ 签发 token（2h 过期）→ 拦截 `/api/v1/admin/**`
+
+### 新增文件
+- `zouliangbu-server/src/main/java/com/zouliangbu/server/route/`：CoordTransform / TwoBulu / TwoBuluClient / RouteImportService / RouteContentController / AdminController / AdminAuthInterceptor / AdminWebConfig + 4 个 Entity + 4 个 Mapper
+- `zouliangbu-server/src/main/resources/db/migration/V3__route_content.sql`（4 张新表）
+- `zouliangbu-server/src/main/resources/static/admin/`：login.html / index.html / edit.html
+- `app/src/main/java/com/zouliangbu/footprint/ui/routes/RouteDetailScreen.kt`
+- `app/src/main/java/com/zouliangbu/footprint/data/remote/ContentApiFactory.kt`：新增 SubmitRouteRequest / SubmissionStatus / RouteDetail / TrackPointDto / MarkerDto
+
+### 测试
+- 服务端：29 用例全绿（原 15 + TwoBuluTest 6 + RoutePlatformTest 8）
+- App：64 用例全绿（不变）
+
+### 已知限制
+- 路线详情接口暂未 join route 表取 name/region（返回 null，App 已容错）
+- 管理后台编辑页保存接口暂未实现（PUT /admin/routes/{id} 返回空）
+- 只支持两步路链接，不支持其他平台
+- 开源使用，图片不复制（后台可填 URL）
+
+---
+
+## [2026-10-20] P6 S4 收尾：Remote 接线 + 接口契约对齐 + GearScreen 异步化
+
+### 本次补丁（静态验证继续通过）
+
+1. **FootprintApp 三个 lazy 单例从 Mock 切换到 Remote**（P6 S4 关键接线）：
+   `RemoteFeedRepository(MockFeedRepository())` / `RemoteRouteRepository(...)` / `RemoteGearRepository(...)`，
+   网络失败自动回退 Mock，UI 零改动。
+2. **接口契约对齐**：服务端 `/feed` 返回 `FeedPage{items,nextCursor}`、`/routes` 返回 `RouteCatalog{recommendations,sections}`，
+   但 App 之前声明成 `List<FeedItem>` / `List<RouteItem>`，反序列化会直接失败。已修正为对齐服务端真实响应体，
+   并新增 `FeedPage` DTO。
+3. **GearScreen 异步化**：`gearRepository.categories()` 之前是主线程同步调用，切到 Remote 后内部 runBlocking
+   走网络会 ANR。改成 `LaunchedEffect + withContext(Dispatchers.IO)` 异步加载。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `./gradlew :app:compileDebugKotlin` | BUILD SUCCESSFUL |
+| `./gradlew :app:testDebugUnitTest` | 64 用例全绿 |
+| `./gradlew :app:assembleDebug` | BUILD SUCCESSFUL，app-debug.apk 54.8 MB |
+| 服务端 `mvn test` | 15/15 全绿 |
+
+---
+
+## [2026-10-20] P2.5-P6 全量开发完成 + 单测扩充（静态验证通过）
+
+### 触发
+用户：后面的开发计划先开始写，全部写完，写完只做静态逻辑验证，晚点再实测。
+
+### 本次完成
+
+#### P2（剩余三项）
+- P2.5 轨迹抽稀：util/Polyline.kt（Douglas-Peucker 显式栈迭代，避免 2 万点 StackOverflow），接进 TrackDetailViewModel。
+- P2.6 写点批量化：RecordingTrackService 加 pendingPoints 缓冲 + flushJob 定时批量 insertAll（FLUSH_INTERVAL_MS = 5s / FLUSH_MAX_BATCH = 20）。
+- P2.8 PARTIAL_WAKE_LOCK：RecordingTrackService 加 acquireWakeLock / releaseWakeLock，记录中持锁防 Doze；stopTracking / onDestroy 释放。
+
+#### P3（五项）
+- P3.1 / P3.3 爬升/下降 + 海拔中值滤波：util/Elevation.kt（阈值 3 m，参考高度累加），TrackSession 加 ascentMeters / descentMeters，AppDatabase v3 到 v4（MIGRATION_3_4 + 4.json 已生成并提交）。
+- P3.2 配速/速度 30s 滑窗：util/Pace.kt，详情页新增平均配速。
+- P3.5 分段统计（每公里）：util/TrackSplits.kt，详情页新增分段列表。
+- 详情页 UI：新增第二排累计爬升 / 平均配速 + 分段列表（最多展示 20 段）。
+
+#### P4 离线地图
+- 数据层：offline/OfflineRegion.kt、OfflineRegionCatalog.kt（清单 JSON 解析，JVM 可测）、OfflinePackageManager.kt（下载 + SHA-256 校验 + 存储 + 总量上限 2 GB）。
+- 接入层：offline/OfflineTileSource.kt（MapTileProviderArray = MapTileFileArchiveProvider + MapTileDownloader）。
+- UI：offline/OfflineMapScreen.kt + OfflineMapViewModel.kt，我的页入口。
+- 内置清单：app/src/main/assets/offline/regions.json（兜底，真实清单走服务端）。
+- 文档：docs/offline-map-baseline-decision.md（P4.4 底座评估，结论高德 + osmdroid + MBTiles）。
+
+#### P5 户外安全
+- P5.1 超时未动提醒 / P5.2 低电量提醒：notify/TrackAlerts.kt（两 channel、每会话最多一次），心跳每秒 checkAlerts。
+- P5.3 位置分享 / P5.4 行程卡分享图：share/Share.kt + share/ShareCardRenderer.kt（640x960 PNG，纯 Canvas，含起终点 + 轨迹缩略图 + 三格数据）。
+
+#### P6 S4 App 侧 Retrofit
+- 新增依赖：retrofit 2.11.0 + okhttp 4.12.0 + kotlinx-serialization-json 1.6.3 + converter-kotlinx-serialization。
+- data/remote/ContentApiFactory.kt：ContentService / ApiResponse / RemoteFeedRepository / RemoteRouteRepository / RemoteGearRepository，网络失败自动回退 Mock（UI 零改动）。
+
+#### 单元测试
+- 新增 4 个测试类：PolylineTest / ElevationTest / PaceTest / TrackSplitsTest，共 22 用例。
+- 修了一个真 bug：Polyline.simplify 的 keep 数组长度写死 3，超过 3 个点就 ArrayIndexOutOfBoundsException。
+- 全量单测 64 用例全绿（原 45 + 新 22）。
+
+### 静态验证结论
+
+| 项 | 结果 |
+|---|---|
+| ./gradlew :app:compileDebugKotlin | BUILD SUCCESSFUL |
+| ./gradlew :app:testDebugUnitTest | 64 用例全绿 |
+| Room schema | 4.json 已生成并入库 |
+| 单测覆盖的新模块 | 抽稀 / 爬升 / 配速 / 分段 |
+| 未做 | 真机/模拟器实测（用户明确说晚点我再实测，按 CLAUDE.md 验证纪律不在本轮测） |
+
+### 已知未做 / 待用户实测
+
+- P6 S5 部署（Docker Compose + nginx + MySQL）——需要运维环境。
+- P3.4 DEM 离线高程（可选增强）——已延后。
+- 离线包实际 MBTiles 资源——manifest 里 url 是占位，需要运维提供真实瓦片包。
+- WorkManager 断点续传——目前用 viewModelScope，用户离开页面会中断下载；ROADMAP P4.1 验收要求的可断点续传还需 WorkManager 改造。
+- 离线包只对 osmdroid 分支生效（高德 MapView 不支持 MBTiles），UI 上已明示。
+
+### 下一步（等用户实测）
+
+1. 用户真机测试记录到停止到列表到详情主链路。
+2. 实测通过后一次性 commit + push 到 YuanZhou314/zouliangbu。
+3. 运维提供 MBTiles 真实资源后接入真实下载。
+
 ## [2026-10-20] 阶段性暂停：进度文档同步 + 仓库全量入库（buildNumber=12）
 
 ### 触发

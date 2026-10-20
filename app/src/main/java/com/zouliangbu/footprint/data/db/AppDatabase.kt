@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 @Database(
     entities = [TrackSession::class, TrackPoint::class],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,11 +50,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v4：累计爬升 / 下降（ROADMAP P3.1）。老记录没算过，一律 0（不猜）。 */
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // NOT NULL + DEFAULT：SQLite 的 ALTER TABLE ADD COLUMN 要求非空列必须带默认值。
+                // 用 REAL 而不是 FLOAT：SQLite 没有 FLOAT 类型，Room 映射 Double 用 REAL。
+                db.execSQL(
+                    "ALTER TABLE track_sessions ADD COLUMN ascentMeters REAL NOT NULL DEFAULT 0"
+                )
+                db.execSQL(
+                    "ALTER TABLE track_sessions ADD COLUMN descentMeters REAL NOT NULL DEFAULT 0"
+                )
+            }
+        }
+
         /**
          * 迁移清单。Room 会从当前库版本逐级跑，缺一条就在启动时抛
          * `IllegalStateException: Room cannot verify the data integrity`。
          */
-        private val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        private val MIGRATIONS: Array<Migration> =
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {

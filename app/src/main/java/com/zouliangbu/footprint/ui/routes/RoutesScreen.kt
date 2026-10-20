@@ -34,6 +34,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -46,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zouliangbu.footprint.data.model.RouteItem
+import com.zouliangbu.footprint.data.remote.SubmitRouteRequest
+import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.model.RouteSection
 import com.zouliangbu.footprint.ui.components.CoverPlaceholder
 import com.zouliangbu.footprint.ui.components.SectionHeader
@@ -55,8 +62,15 @@ import com.zouliangbu.footprint.ui.components.SectionHeader
  * 卡片本期不可进详情。
  */
 @Composable
-fun RoutesScreen(vm: RoutesViewModel = viewModel()) {
+fun RoutesScreen(
+    onOpenDetail: (Long) -> Unit = {},
+    vm: RoutesViewModel = viewModel()
+) {
     val state by vm.uiState.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var showImportDialog by remember { mutableStateOf(false) }
+    var importUrl by remember { mutableStateOf("") }
+    var importNote by remember { mutableStateOf("") }
 
     LazyVerticalGrid(
         columns = GridCells.Fixed(2),
@@ -79,6 +93,14 @@ fun RoutesScreen(vm: RoutesViewModel = viewModel()) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.clickable(enabled = false) { /* 暂未实现 */ }
                 )
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    "导入路线",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.clickable { showImportDialog = true }
+                )
             }
         }
         item(span = { GridItemSpan(2) }) {
@@ -93,7 +115,7 @@ fun RoutesScreen(vm: RoutesViewModel = viewModel()) {
                     contentPadding = PaddingValues(horizontal = 4.dp)
                 ) {
                     items(state.recommendations, key = { it.id }) { route ->
-                        RecommendCard(route)
+                        RecommendCard(route, onOpenDetail)
                     }
                 }
             }
@@ -105,7 +127,7 @@ fun RoutesScreen(vm: RoutesViewModel = viewModel()) {
                 SectionHeader(section.title, subtitle = section.subtitle)
             }
             itemsIndexed(section.routes, key = { _, r -> section.id + "-" + r.id }) { _, route ->
-                RouteCard(route)
+                RouteCard(route, onOpenDetail)
             }
         }
 
@@ -166,12 +188,12 @@ private fun SearchBox(query: String, onQueryChange: (String) -> Unit) {
 
 /** 横向推荐位大卡（封面 + 名称）。 */
 @Composable
-private fun RecommendCard(route: RouteItem) {
+private fun RecommendCard(route: RouteItem, onOpenDetail: (Long) -> Unit = {}) {
     Box(
         modifier = Modifier
             .width(220.dp)
             .clip(RoundedCornerShape(14.dp))
-            .clickable(enabled = false) { /* 详情页暂未实现 */ }
+            .clickable { route.id.toLongOrNull()?.let { onOpenDetail(it) } }
     ) {
         CoverPlaceholder(
             seed = route.coverStyle,
@@ -198,12 +220,12 @@ private fun RecommendCard(route: RouteItem) {
 
 /** 分组内小卡。 */
 @Composable
-private fun RouteCard(route: RouteItem) {
+private fun RouteCard(route: RouteItem, onOpenDetail: (Long) -> Unit = {}) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.clickable(enabled = false) { /* 详情页暂未实现 */ }
+        modifier = Modifier.clickable { route.id.toLongOrNull()?.let { onOpenDetail(it) } }
     ) {
         Column {
             CoverPlaceholder(

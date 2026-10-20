@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>走两步 · 编辑路线</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333}
+.topbar{background:#1B5E20;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:16px}
+.topbar h1{font-size:18px;flex:1}
+.topbar a{color:#fff;text-decoration:none;font-size:13px;padding:6px 16px;border-radius:6px;background:rgba(255,255,255,0.15)}
+.topbar a:hover{background:rgba(255,255,255,0.25)}
+.form{max-width:800px;margin:24px auto;padding:0 24px}
+.group{background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
+.group h2{font-size:15px;margin-bottom:16px;color:#555}
+label{display:block;font-size:12px;color:#888;margin-bottom:4px;margin-top:12px}
+input,textarea,select{padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;width:100%}
+input:focus,textarea:focus,select:focus{border-color:#1B5E20}
+textarea{resize:vertical;min-height:100px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+.actions{display:flex;gap:12px;justify-content:flex-end;margin:20px 0}
+.btn{padding:12px 24px;border:none;border-radius:8px;font-size:14px;cursor:pointer}
+.btn-save{background:#2e7d32;color:#fff}
+.btn-save:hover{background:#1b5e20}
+.btn-cancel{background:#757575;color:#fff}
+.info{font-size:12px;color:#999;background:#f9f9f9;padding:12px;border-radius:8px;margin-top:12px}
+.track-info{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:12px}
+.track-info .item{text-align:center;padding:10px;background:#f5f5f5;border-radius:8px}
+.track-info .item .val{font-size:18px;font-weight:600;color:#1B5E20}
+.track-info .item .label{font-size:11px;color:#888;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <h1 id="pageTitle">编辑路线</h1>
+  <a href="index.html">← 返回</a>
+</div>
+
+<div class="form">
+  <div class="group">
+    <h2>一键解析</h2>
+    <div style="display:flex;gap:12px;align-items:flex-end">
+      <div style="flex:1">
+        <label>两步路链接</label>
+        <input type="text" id="parseUrl" placeholder="https://www.2bulu.com/mc/route/detail?id=...">
+      </div>
+      <button class="btn btn-save" onclick="parseRoute()" style="white-space:nowrap;height:42px">解析填充</button>
+    </div>
+    <div class="info" id="parseStatus" style="margin-top:8px;display:none"></div>
+  </div>
+  <div class="group">
+    <h2>基本信息</h2>
+    <label>路线名称</label>
+    <input type="text" id="name" placeholder="路线名称">
+    <div class="row-2">
+      <div>
+        <label>地区</label>
+        <input type="text" id="region" placeholder="地区">
+      </div>
+      <div>
+        <label>距离 (km)</label>
+        <input type="number" id="distanceKm" step="0.1" placeholder="0.0">
+      </div>
+    </div>
+    <div class="row-2">
+      <div>
+        <label>爬升 (m)</label>
+        <input type="number" id="ascentMeters" placeholder="0">
+      </div>
+      <div>
+        <label>标签（逗号分隔）</label>
+        <input type="text" id="tags" placeholder="登山,露营">
+      </div>
+    </div>
+    <div class="row-2">
+      <div>
+        <label>封面图 URL（可选）</label>
+        <input type="text" id="coverUrl" placeholder="https://...">
+      </div>
+      <div>
+        <label>推荐到首页</label>
+        <select id="isRecommend">
+          <option value="false">否</option>
+          <option value="true">是</option>
+        </select>
+      </div>
+    </div>
+    <label>来源 URL</label>
+    <input type="text" id="sourceUrl" placeholder="来源链接">
+    <div class="info" id="sourceInfo"></div>
+  </div>
+
+  <div class="group">
+    <h2>路线正文</h2>
+    <label>简介（intro）</label>
+    <textarea id="introHtml" rows="4" placeholder="路线简介..."></textarea>
+    <label>详细正文（content）</label>
+    <textarea id="contentHtml" rows="8" placeholder="详细描述..."></textarea>
+    <label>交通攻略（traffic）</label>
+    <textarea id="trafficHtml" rows="4" placeholder="交通信息..."></textarea>
+  </div>
+
+  <div class="group">
+    <h2>轨迹统计</h2>
+    <div class="track-info" id="trackStats">
+      <div class="item"><div class="val" id="statDistance">-</div><div class="label">总里程</div></div>
+      <div class="item"><div class="val" id="statClimb">-</div><div class="label">累计爬升</div></div>
+      <div class="item"><div class="val" id="statAlt">-</div><div class="label">最高海拔</div></div>
+      <div class="item"><div class="val" id="statTime">-</div><div class="label">参考耗时</div></div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button class="btn btn-cancel" onclick="window.location.href='index.html'">取消</button>
+    <button class="btn btn-save" onclick="save()">保存</button>
+  </div>
+</div>
+
+<script>
+const urlParams = new URLSearchParams(window.location.search);
+const routeId = urlParams.get('id');
+
+function getToken() {
+  return localStorage.getItem('admin_token') || '';
+}
+
+async function parseRoute() {
+  const url = document.getElementById('parseUrl').value.trim();
+  if (!url) { alert('请输入两步路链接'); return; }
+  const statusEl = document.getElementById('parseStatus');
+  statusEl.style.display = 'block';
+  statusEl.textContent = '解析中...';
+  try {
+    const resp = await fetch('/api/v1/admin/parse', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Admin-Token': getToken()
+      },
+      body: JSON.stringify({ url })
+    });
+    const data = await resp.json();
+    if (resp.status === 401 || data.code === 401) {
+      window.location.href = 'login.html';
+      return;
+    }
+    if (data.code === 0 && data.data) {
+      const r = data.data;
+      document.getElementById('name').value = r.name || '';
+      document.getElementById('region').value = r.region || '';
+      document.getElementById('distanceKm').value = r.distanceKm || '';
+      document.getElementById('ascentMeters').value = r.ascentMeters || '';
+      document.getElementById('introHtml').value = r.introHtml || '';
+      document.getElementById('contentHtml').value = r.contentHtml || '';
+      document.getElementById('trafficHtml').value = r.trafficHtml || '';
+      document.getElementById('sourceUrl').value = url;
+      statusEl.textContent = '解析成功：' + r.name + ' | ' + r.trackPointCount + '个轨迹点 | ' + r.markerCount + '个标注点';
+    } else {
+      statusEl.textContent = '解析失败：' + (data.msg || '未知错误');
+    }
+  } catch (e) {
+    statusEl.textContent = '网络错误，请确认服务端已启动';
+  }
+}
+
+async function loadRoute() {
+  if (!routeId) return;
+  document.getElementById('pageTitle').textContent = '编辑路线 #' + routeId;
+  try {
+    const resp = await fetch('/api/v1/routes/' + routeId);
+    const data = await resp.json();
+    if (data.code !== 0 || !data.data) { alert('路线不存在'); return; }
+    const r = data.data;
+    document.getElementById('name').value = r.name || '';
+    document.getElementById('region').value = r.region || '';
+    document.getElementById('distanceKm').value = r.distanceKm || '';
+    document.getElementById('ascentMeters').value = r.ascentMeters || '';
+    document.getElementById('tags').value = r.tags || '';
+    document.getElementById('coverUrl').value = r.coverUrl || '';
+    document.getElementById('isRecommend').value = r.isRecommend ? 'true' : 'false';
+    document.getElementById('sourceUrl').value = r.sourceUrl || '';
+    document.getElementById('introHtml').value = r.introHtml || '';
+    document.getElementById('contentHtml').value = r.contentHtml || '';
+    document.getElementById('trafficHtml').value = r.trafficHtml || '';
+    if (r.sourceName) {
+      document.getElementById('sourceInfo').textContent = '来源：' + r.sourceName + (r.sourceAuthor ? ' · ' + r.sourceAuthor : '');
+    }
+  } catch (e) {
+    alert('网络错误');
+  }
+}
+
+async function save() {
+  const body = {
+    name: document.getElementById('name').value.trim(),
+    region: document.getElementById('region').value.trim(),
+    distanceKm: parseFloat(document.getElementById('distanceKm').value) || 0,
+    ascentMeters: parseInt(document.getElementById('ascentMeters').value) || 0,
+    tags: document.getElementById('tags').value.trim(),
+    coverUrl: document.getElementById('coverUrl').value.trim(),
+    isRecommend: document.getElementById('isRecommend').value === 'true',
+    introHtml: document.getElementById('introHtml').value,
+    contentHtml: document.getElementById('contentHtml').value,
+    trafficHtml: document.getElementById('trafficHtml').value
+  };
+  const resp = await fetch('/api/v1/admin/routes/' + routeId, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Admin-Token': getToken()
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await resp.json();
+  if (data.code === 0) {
+    alert('保存成功');
+    window.location.href = 'index.html';
+  } else {
+    alert('保存失败：' + (data.msg || '未知错误'));
+  }
+}
+
+// 未登录自动跳转
+if (!getToken()) {
+    window.location.href = 'login.html';
+} else {
+    loadRoute();
+}
+</script>
+</body>
+</html>

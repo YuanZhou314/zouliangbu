@@ -10,6 +10,10 @@ import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.db.TrackSession
 import com.zouliangbu.footprint.export.GpxExporter
 import com.zouliangbu.footprint.ui.map.MapPoint
+import com.zouliangbu.footprint.util.Elevation
+import com.zouliangbu.footprint.util.Pace
+import com.zouliangbu.footprint.util.Polyline
+import com.zouliangbu.footprint.util.TrackSplits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,8 +26,15 @@ data class TrackDetailUi(
     val loading: Boolean = true,
     val session: TrackSession? = null,
     val points: List<MapPoint> = emptyList(),
-    /** 原始点数（含低质量点）。[points] 是喂地图的投影，将来抽稀后两者会不等。 */
-    val rawPointCount: Int = 0
+    /** 原始点数（含低质量点）。[points] 是喂地图的投影，抽稀后两者会不等。 */
+    val rawPointCount: Int = 0,
+    /** 速度/配速统计（ROADMAP P3.2）。 */
+    val paceStats: Pace.Stats = Pace.Stats.ZERO,
+    /** 爬升/下降（米，ROADMAP P3.1）。 */
+    val ascentMeters: Double = 0.0,
+    val descentMeters: Double = 0.0,
+    /** 每公里分段（ROADMAP P3.5）。 */
+    val splits: List<TrackSplits.Split> = emptyList()
 )
 
 /**
@@ -52,11 +63,30 @@ class TrackDetailViewModel(
         viewModelScope.launch {
             val session = repo.getSession(sessionId)
             val raw = repo.getPointsForSession(sessionId)
+
+            // 抽稀（ROADMAP P2.5）：只有喂地图的折线用抽稀后的点，
+            // 统计（距离/配速/爬升/分段）一律用**原始点**——抽稀会丢掉细节，
+            // 用抽稀后的点算距离会少算几十米。
+            val simplified = Polyline.simplifyPoints(raw)
+            val renderedPoints = simplified.map { MapPoint(it.lat, it.lng) }
+
+            // 爬升：会话表里存的是停止时算好的值（v4）。老记录是 0，
+            // 这时用当前点集现算一次，让历史记录也能看到爬升。
+            val storedAscent = session?.ascentMeters ?: 0.0
+            val storedDescent = session?.descentMeters ?: 0.0
+            val computed = Elevation.ascentOf(raw)
+            val ascent = if (storedAscent > 0.0) storedAscent else computed.ascentMeters
+            val descent = if (storedDescent > 0.0) storedDescent else computed.descentMeters
+
             _state.value = TrackDetailUi(
                 loading = false,
                 session = session,
-                points = raw.map { MapPoint(it.lat, it.lng) },
-                rawPointCount = raw.size
+                points = renderedPoints,
+                rawPointCount = raw.size,
+                paceStats = Pace.statsOf(raw),
+                ascentMeters = ascent,
+                descentMeters = descent,
+                splits = TrackSplits.splitsOf(raw)
             )
         }
     }

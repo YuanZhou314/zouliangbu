@@ -45,6 +45,8 @@ interface TrackSessionDao {
                s.totalDistanceMeters AS totalDistanceMeters,
                s.name AS name,
                s.pausedMs AS pausedMs,
+               s.ascentMeters AS ascentMeters,
+               s.descentMeters AS descentMeters,
                (SELECT COUNT(*) FROM track_points p WHERE p.sessionId = s.id) AS pointCount
         FROM track_sessions s
         WHERE s.endTime IS NOT NULL
@@ -59,6 +61,18 @@ interface TrackSessionDao {
                 "pausedMs = :pausedMs WHERE id = :id"
     )
     suspend fun finalize(id: Long, endTime: Long, distance: Float, pausedMs: Long)
+
+    /**
+     * 写入累计爬升 / 下降（v4，ROADMAP P3.1）。
+     *
+     * 单独一个方法而不是塞进 [finalize]：爬升是**停止后**才算得出的
+     * （要对整条轨迹做中值滤波），而 [finalize] 是停止瞬间就该写完的。
+     * 分开写，停止瞬间不必等滤波算完，UI 的摘要卡立刻能出。
+     */
+    @Query(
+        "UPDATE track_sessions SET ascentMeters = :ascent, descentMeters = :descent WHERE id = :id"
+    )
+    suspend fun updateAscent(id: Long, ascent: Double, descent: Double)
 
     @Query("DELETE FROM track_sessions WHERE id = :id")
     suspend fun deleteById(id: Long)

@@ -148,6 +148,14 @@ dependencies {
     // 与高德并存：MapViewWrapper 按 AmapKey.isConfigured() 路由，有 key 自动切回高德。
     implementation("org.osmdroid:osmdroid-android:6.1.20")
 
+    // Retrofit + OkHttp + kotlinx-serialization：内容接口对接（ROADMAP P6 S4）。
+    // 仅在 Remote*Repository 里用，Mock 数据不受影响。
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 
