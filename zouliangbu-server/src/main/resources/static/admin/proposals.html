@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>社区提案 · 走两步管理后台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app"></div>
+
+<script src="layout.js"></script>
+<script>
+let rows = [];
+let status = 'PENDING';
+
+Shell.mount({
+  active: 'proposals',
+  title: '社区提案',
+  render(body, ctx) {
+    ctx.actions.innerHTML =
+      '<select id="statusSel" style="margin-right:8px">' +
+      ['PENDING', 'APPROVED', 'MERGED', 'REJECTED', 'CONFLICT']
+        .map(s => '<option value="' + s + '">' + statusName(s) + '</option>').join('') +
+      '</select><button class="btn" onclick="load()">刷新</button>';
+    document.getElementById('statusSel').value = status;
+    document.getElementById('statusSel').onchange = function (e) {
+      status = e.target.value;
+      load();
+    };
+    body.innerHTML = `
+      <div class="card">
+        <div class="hint" style="margin-bottom:14px">
+          客观勘误（EDIT + OBJECTIVE）达到认票阈值会自动合并，不会出现在这里等审核。
+          这里要看的是：<b>外部导入</b>的合规性、<b>本人轨迹上传</b>的隐私与重复、以及<b>版本冲突</b>。
+        </div>
+        <div id="tableWrap"><div class="empty">加载中...</div></div>
+      </div>
+    `;
+    load();
+  }
+});
+
+function statusName(s) {
+  return ({
+    PENDING: '待处理',
+    APPROVED: '已通过',
+    MERGED: '已合并',
+    REJECTED: '已驳回',
+    CONFLICT: '版本冲突'
+  })[s] || s;
+}
+
+function typeName(t) {
+  return ({ IMPORT: '外部导入', UPLOAD: '轨迹上传', EDIT: '线路勘误' })[t] || t;
+}
+
+async function load() {
+  const wrap = document.getElementById('tableWrap');
+  wrap.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    rows = await Shell.api('/api/v1/admin/proposals?status=' + encodeURIComponent(status) + '&limit=100');
+  } catch (e) {
+    wrap.innerHTML = '<div class="empty">加载失败：' + Shell.esc(e.message) + '</div>';
+    return;
+  }
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty">没有' + statusName(status) + '的提案</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>类型</th><th>提案人</th><th>目标线路</th><th>说明</th>
+          <th>认票</th><th>状态</th><th>时间</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td>${r.id}</td>
+            <td>${Shell.esc(typeName(r.type))}</td>
+            <td>${Shell.esc(r.proposerName || '匿名')}</td>
+            <td>${r.targetRouteId ? ('#' + r.targetRouteId) : (r.sourceUrl ? Shell.esc(r.sourceUrl) : '-')}</td>
+            <td style="max-width:280px">${Shell.esc(r.reason || '')}</td>
+            <td>${r.votesUp}/${r.threshold}${r.votesDown > 0 ? (' · 反对' + r.votesDown) : ''}</td>
+            <td>${Shell.esc(statusName(r.status))}</td>
+            <td>${Shell.esc((r.createdAt || '').replace('T', ' ').slice(0, 16))}</td>
+            <td>
+              ${r.status === 'PENDING' || r.status === 'CONFLICT'
+                ? '<button class="btn btn-primary" onclick="approve(' + r.id + ')">通过</button> ' +
+                  '<button class="btn" onclick="reject(' + r.id + ')">驳回</button>'
+                : '<span class="hint">' + Shell.esc(r.rejectReason || '') + '</span>'}
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function approve(id) {
+  if (!confirm('确认通过提案 #' + id + '？\n导入类会立即抓取入库，上传类会建线路，勘误会合并成新版本。')) return;
+  try {
+    const routeId = await Shell.api('/api/v1/admin/proposals/' + id + '/approve', { method: 'POST' });
+    Shell.toast('已通过，线路 #' + routeId);
+    load();
+  } catch (e) {
+    Shell.toast(e.message, false);
+  }
+}
+
+async function reject(id) {
+  const reason = prompt('驳回原因（会展示给提案人）', '不符合收录标准');
+  if (reason === null) return;
+  try {
+    await Shell.api('/api/v1/admin/proposals/' + id + '/reject', {
+      method: 'POST',
+      body: JSON.stringify({ reason: reason })
+    });
+    Shell.toast('已驳回');
+    load();
+  } catch (e) {
+    Shell.toast(e.message, false);
+  }
+}
+</script>
+</body>
+</html>

@@ -25,6 +25,11 @@ public class RouteDetailEntity {
     private String sourceName;
     private String sourceAuthor;
     private LocalDateTime parsedAt;
+    /** 版本号：每次合并 +1，回滚也 +1（保持单调，冲突检测靠它）。 */
+    private Integer version;
+    /** 最后一次维护者（提案人昵称 / 管理员）。 */
+    private String curatorName;
+    private LocalDateTime updatedAt;
 
     public Long getRouteId() { return routeId; }
     public void setRouteId(Long routeId) { this.routeId = routeId; }
@@ -56,4 +61,10 @@ public class RouteDetailEntity {
     public void setSourceAuthor(String v) { this.sourceAuthor = v; }
     public LocalDateTime getParsedAt() { return parsedAt; }
     public void setParsedAt(LocalDateTime v) { this.parsedAt = v; }
+    public Integer getVersion() { return version; }
+    public void setVersion(Integer v) { this.version = v; }
+    public String getCuratorName() { return curatorName; }
+    public void setCuratorName(String v) { this.curatorName = v; }
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime v) { this.updatedAt = v; }
 }

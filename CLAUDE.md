@@ -102,7 +102,9 @@
 
 - 本轮前：45 用例（CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9 / TrackMetrics 7 / TrackClock 7）。
 - 本轮新增：PolylineTest / ElevationTest / PaceTest / TrackSplitsTest 共 22 用例。
-- 当前：64 用例全绿。改抽稀、爬升、配速、分段任一逻辑，跑 testDebugUnitTest 保持全绿。
+- 2026-10-21 新增：SegmentMatchTest 7 用例（同路段匹配/对比）。
+- 当前：**71 用例全绿**（服务端另有 84 例）。改抽稀、爬升、配速、分段、路段匹配任一逻辑，
+  跑 testDebugUnitTest 保持全绿。
 
 ## 双轨地图架构（关键，本次会话产物）
 地图入口 `ui/map/MapViewWrapper.kt`，按 `data/AmapKey.kt::isConfigured()` 路由：
@@ -339,6 +341,44 @@
   `RouteData.ParsedRoute`。加平台 = 枚举 + `RouteImportService.fetch` 分支 + Client。
   六只脚不抓脚印图片（正文 `<img>` 全剥）。
 - 接口字段名必须与 App 的 `data/model/*.kt` 逐字段一致——这样换 Remote 实现时 UI/ViewModel 零改动。
+
+## 社区共维护提案机制（2026-10-21，硬约束）
+
+线路由社区共维护：**不开放自由建线/发动态**，只做「提案 + 认票 + 版本回滚」
+（设计口径见 `docs/product-philosophy.md`）。
+
+- **三张表**：`content_proposal`（提案）/ `content_vote`（认票）/ `route_detail_revision`（版本快照），
+  V7 迁移（sqlite+mysql）；`route_detail` 加 `version` / `curator_name` / `updated_at`。
+- **提案类型**：`IMPORT`（外部链接导入 → 必须人工合规审核）/ `UPLOAD`（本人轨迹）/ `EDIT`（勘误）。
+- **自动合并只对 EDIT + OBJECTIVE 生效**：认票 ≥ threshold（默认 2，含提案人自己那票）且 0 反对
+  且 `base_version == 当前版本` → 合并成新版本。**PRIVACY / SUBJECTIVE 永不自动合并**。
+- **规则层不可投票绕过**：UPLOAD 提交即校验（≥10 点、≤20000 点、坐标在国境内、时间戳递增）；
+  不合格直接 400，不进人工队列。
+- **快照是回滚的前提**：每次合并/导入都写 `route_detail_revision`（唯一索引 `uk_revision(route_id, version)`）。
+  回滚 = 把旧快照写回，版本号**继续 +1**（保持单调，不复用旧号）。
+- **冲突检测靠 `base_version`**：提案基于的版本 ≠ 当前版本 → 标 `CONFLICT`，不覆盖，交人工。
+- **接口**：公开 `/api/v1/proposals`（提交/列表/详情/投票，免登录，身份用设备 UUID）；
+  管理 `/api/v1/admin/proposals`（审批/驳回/版本列表/回滚，走 AdminAuthInterceptor）。
+- **配置**：`zlb.proposal.auto-merge-threshold`(2) / `min-age-minutes`(0) /
+  `upload-autopublish`(false，服务端没有 POI 库判不了隐私，默认走人工) / `rate-limit-per-hour`(10)。
+- **测试坑**：`uk_revision` 是唯一索引，用例之间不清理会撞车，表现为 **500 而不是断言失败**
+  （`ProposalApiTest.seed` 每轮 delete 重建 v1）。测试 JSON 一律字符串拼接，别用 `Map.of`
+  套 12 个参数 + 嵌套转义——javac 的报错位置会离真实原因很远。
+### App 端入口（2026-10-21 补）
+
+| 入口 | 位置 | 做什么 |
+|---|---|---|
+| 社区维护区 | 线路详情底部（`ui/routes/RouteMaintenanceSection.kt`） | 显示版本/维护者；列出待处理勘误；认可/反对；提勘误对话框 |
+| 与上次对比 | 轨迹详情底部按钮（`ui/tracks/TrackCompareCard.kt`） | 自动找同一条线的历史记录，只比共同路段 |
+| 贡献到线路库 | 轨迹详情底部按钮（`ui/tracks/ContributeTrackDialog.kt`） | 把整条轨迹发成 UPLOAD 提案 |
+| 社区提案审核 | 管理后台 `static/admin/proposals.html` | 管理员通过/驳回（导入/上传/冲突） |
+
+数据层：`data/remote/ProposalApi.kt`（Retrofit 接口 + DTO）、`data/repo/ProposalRepository.kt`（组包 + 转发）、
+`data/DeviceId.kt`（匿名设备 UUID，免登录身份）。
+
+**对比的匹配策略**（`TrackDetailViewModel.buildCompare`）：只取最近 8 条已结束会话 → 起点或终点 <300 m
+且总距离差 <40% 才做几何匹配 → 交给 `SegmentMatch`（内部还有 30% 重合度门槛）。
+不做全量两两比对：手机上那是秒级卡顿。
 
 ## 构建 & 调试
 

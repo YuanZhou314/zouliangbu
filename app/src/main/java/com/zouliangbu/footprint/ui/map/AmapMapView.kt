@@ -65,13 +65,16 @@ import kotlinx.coroutines.launch
  * @param showEndpoints 是否画起点 / 终点 marker（记录中不画，回看时才有意义）。
  * @param autoZoom      是否自动把相机缩放到整条轨迹（回看用；记录中必须为 false，
  *                      否则相机在每次加点时被重置，跟不住当前位置）。
+ * @param onEngineReady 引擎创建后回调一次，供上层调 [MapEngine.setMapType] / [MapEngine.zoomIn] 等
+ *                      受控操作（记录页右侧图层/缩放按钮用）。详情页可传 null。
  */
 @Composable
 fun AmapMapView(
     modifier: Modifier = Modifier,
     track: List<MapPoint> = emptyList(),
     showEndpoints: Boolean = false,
-    autoZoom: Boolean = false
+    autoZoom: Boolean = false,
+    onEngineReady: ((MapEngine) -> Unit)? = null
 ) {
     val context = LocalContext.current
     if (!AmapKey.isConfigured(context)) {
@@ -84,6 +87,11 @@ fun AmapMapView(
     val provider = remember { (context.applicationContext as FootprintApp).locationProvider }
     // mapView 在 createMapView 里已经 onCreate 过，map 对象此刻可用。
     val engine = remember(mapView) { AmapMapEngine(mapView.map) }
+
+    // 引擎就绪回调：让上层（记录页）拿到 engine 引用做 setMapType / zoomIn 等受控操作。
+    LaunchedEffect(engine) {
+        onEngineReady?.invoke(engine)
+    }
 
     // 地图侧定位源：桥接共享 LocationProvider。Compose 负责订阅/退订，随生命周期。
     val source = remember { AmapLocationSource(provider) }

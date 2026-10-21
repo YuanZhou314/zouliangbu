@@ -182,6 +182,17 @@ fun RouteDetailScreen(
                     }
                 }
 
+                // 6.5 社区维护：版本、待处理提案、提勘误
+                detail?.let { d ->
+                    item {
+                        RouteMaintenanceSection(
+                            routeId = routeId,
+                            version = d.version,
+                            curatorName = d.curatorName
+                        )
+                    }
+                }
+
                 // 7. 来源
                 item { detail?.let { SourceFooter(it) } }
 

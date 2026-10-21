@@ -44,6 +44,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,14 +58,25 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.db.TrackSession
 import com.zouliangbu.footprint.service.RecordingTrackService
+import com.zouliangbu.footprint.ui.map.MapEngine
+import com.zouliangbu.footprint.ui.map.MapType
 import com.zouliangbu.footprint.ui.map.MapViewWrapper
 import com.zouliangbu.footprint.ui.theme.OnDarkMuted
 import com.zouliangbu.footprint.util.TimeFmt
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/** 顶部 GPS 仪表条的定位数据（GCJ-02）。 */
+private data class GpsFix(
+    val lat: Double,
+    val lng: Double,
+    val altitude: Double?,
+    val accuracy: Float?
+)
 
 /**
  * 出发页（全屏记录页，无底栏）。
@@ -95,6 +107,24 @@ fun RecordScreen(
 
     // 摘要对话框：service stop 后展示
     var summaryFor by remember { mutableStateOf<Long?>(null) }
+
+    // 当前定位（GCJ-02）：用于顶部 GPS 仪表条（经纬度/海拔/误差）。
+    // 复用共享 LocationProvider（与地图蓝点同源），不另起定位客户端。
+    val gpsLocation by produceState<GpsFix?>(initialValue = null) {
+        val provider = (context.applicationContext as FootprintApp).locationProvider
+        provider.location.collect { loc ->
+            value = GpsFix(
+                lat = loc.latitude,
+                lng = loc.longitude,
+                altitude = loc.altitude.takeIf { !it.isNaN() },
+                accuracy = loc.accuracy.takeIf { !it.isNaN() }
+            )
+        }
+    }
+
+    // 地图引擎引用：右侧图层/缩放按钮通过它调 setMapType / zoomIn / zoomOut。
+    var mapEngine by remember { mutableStateOf<MapEngine?>(null) }
+    var mapType by remember { mutableStateOf(MapType.NORMAL) }
 
     fun proceedToStart() {
         vm.startSession { sid ->
@@ -134,7 +164,8 @@ fun RecordScreen(
         // 记录中实时画线（P1.2）：不画起终点、不自动缩放——相机要跟着当前位置走。
         MapViewWrapper(
             modifier = Modifier.fillMaxSize(),
-            track = track
+            track = track,
+            onEngineReady = { mapEngine = it }
         )
 
         // 左上角返回键（地图画到状态栏后面，需要 statusBarsPadding）
@@ -155,6 +186,32 @@ fun RecordScreen(
                 tint = Color.White
             )
         }
+
+        // 顶部 GPS 仪表条（经纬度/海拔/误差）：一直显示，与两步路一致。
+        GpsInfoBar(
+            lat = gpsLocation?.lat,
+            lng = gpsLocation?.lng,
+            altitude = gpsLocation?.altitude,
+            accuracy = gpsLocation?.accuracy,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 8.dp, start = 64.dp, end = 64.dp)
+        )
+
+        // 右侧地图控制列：图层切换 + 缩放（居中偏下，避开底部记录卡）。
+        MapSideControls(
+            mapType = mapType,
+            onMapTypeChange = { type ->
+                mapType = type
+                mapEngine?.setMapType(type)
+            },
+            onZoomIn = { mapEngine?.zoomIn() },
+            onZoomOut = { mapEngine?.zoomOut() },
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp)
+        )
 
         // 记录中浮层：顶部居中
         if (snapshot != null) {
@@ -202,7 +259,7 @@ fun RecordScreen(
             }
         }
 
-        // 底部控制栏：唯一一个大的开始/停止按钮
+        // 底部控制栏：未记录时一个大 GO 圆钮（仿两步路）；记录中显示暂停/停止条。
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -217,36 +274,53 @@ fun RecordScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!isRecording) {
-                    Button(
-                        onClick = {
-                            // 第一步：检查前台定位权限；若已授权直接进入第二步
-                            val fineGranted = ContextCompat.checkSelfPermission(
-                                context, Manifest.permission.ACCESS_FINE_LOCATION
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (fineGranted) {
-                                // 第一步已有权，跳到第二步
-                                val bgPerms = backgroundPermissions()
-                                val bgGranted = bgPerms.isEmpty() ||
-                                        ContextCompat.checkSelfPermission(context, bgPerms[0]) ==
-                                        PackageManager.PERMISSION_GRANTED
-                                if (bgGranted) {
-                                    proceedToStart()
-                                } else {
-                                    backgroundPermissionLauncher.launch(bgPerms)
-                                }
-                            } else {
-                                foregroundPermissionLauncher.launch(foregroundPermissions())
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth().height(56.dp),
-                        shape = RoundedCornerShape(28.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        )
+                    // 大圆 GO 按钮（仿两步路）：点击走两步权限流程后启动记录。
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("开始记录", fontSize = 18.sp)
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary)
+                                .clickable {
+                                    // 第一步：检查前台定位权限；若已授权直接进入第二步
+                                    val fineGranted = ContextCompat.checkSelfPermission(
+                                        context, Manifest.permission.ACCESS_FINE_LOCATION
+                                    ) == PackageManager.PERMISSION_GRANTED
+                                    if (fineGranted) {
+                                        val bgPerms = backgroundPermissions()
+                                        val bgGranted = bgPerms.isEmpty() ||
+                                                ContextCompat.checkSelfPermission(context, bgPerms[0]) ==
+                                                PackageManager.PERMISSION_GRANTED
+                                        if (bgGranted) {
+                                            proceedToStart()
+                                        } else {
+                                            backgroundPermissionLauncher.launch(bgPerms)
+                                        }
+                                    } else {
+                                        foregroundPermissionLauncher.launch(foregroundPermissions())
+                                    }
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    "GO",
+                                    color = Color.White,
+                                    fontSize = 28.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "开始",
+                                    color = Color.White,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
                     }
                 } else {
                     // 暂停 / 继续（P2.4）：暂停期间不采点、不计距离、不计时长，

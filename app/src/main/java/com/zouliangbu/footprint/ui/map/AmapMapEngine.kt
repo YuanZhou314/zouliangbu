@@ -86,6 +86,21 @@ class AmapMapEngine(private val aMap: AMap) : MapEngine {
         aMap.moveCamera(CameraUpdateFactory.newLatLngZoom(LatLng(point.lat, point.lng), zoom))
     }
 
+    override fun setMapType(type: MapType) {
+        aMap.mapType = when (type) {
+            MapType.NORMAL -> AMap.MAP_TYPE_NORMAL
+            MapType.SATELLITE -> AMap.MAP_TYPE_SATELLITE
+        }
+    }
+
+    override fun zoomIn() {
+        aMap.animateCamera(CameraUpdateFactory.zoomIn())
+    }
+
+    override fun zoomOut() {
+        aMap.animateCamera(CameraUpdateFactory.zoomOut())
+    }
+
     /** 地图加载完成后重放最后一次的覆盖物设置（见类注释）。 */
     fun reapply() {
         if (lastTrack.isNotEmpty()) setTrack(lastTrack)

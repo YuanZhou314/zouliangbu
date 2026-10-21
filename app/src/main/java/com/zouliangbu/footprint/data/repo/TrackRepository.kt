@@ -58,6 +58,10 @@ class TrackRepository(private val db: AppDatabase) {
 
     suspend fun getSession(id: Long): TrackSession? = sessionDao.getById(id)
 
+    /** 最近 N 条已结束会话（排除自己），「与上次对比」的候选窗口。 */
+    suspend fun recentCompletedSessions(excludeId: Long, limit: Int): List<TrackSession> =
+        sessionDao.recentCompleted(excludeId, limit)
+
     suspend fun countPoints(sessionId: Long): Int = pointDao.count(sessionId)
 
     fun observeSessions(): Flow<List<TrackSession>> = sessionDao.observeAll()

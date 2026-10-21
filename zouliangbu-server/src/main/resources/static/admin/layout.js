@@ -30,7 +30,10 @@ const Shell = (function () {
     },
     {
       group: '审核治理',
-      items: [{ key: 'audit', name: '操作审计', href: 'audit.html' }]
+      items: [
+        { key: 'proposals', name: '社区提案', href: 'proposals.html' },
+        { key: 'audit', name: '操作审计', href: 'audit.html' }
+      ]
     },
     {
       group: '系统',

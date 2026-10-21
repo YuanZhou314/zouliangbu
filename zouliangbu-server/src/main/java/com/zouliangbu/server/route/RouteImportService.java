@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.zouliangbu.server.content.entity.RouteEntity;
 import com.zouliangbu.server.content.mapper.RouteMapper;
 import com.zouliangbu.server.route.mapper.RouteDetailMapper;
+import com.zouliangbu.server.route.mapper.RouteDetailRevisionMapper;
 import com.zouliangbu.server.route.mapper.RouteMarkerMapper;
 import com.zouliangbu.server.route.mapper.RouteSubmissionMapper;
 import com.zouliangbu.server.route.mapper.RouteTrackPointMapper;
@@ -14,7 +15,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 路线导入服务：解析第三方路线链接（两步路 / 六只脚），
@@ -34,6 +37,7 @@ public class RouteImportService {
     private final RouteTrackPointMapper trackMapper;
     private final RouteMarkerMapper markerMapper;
     private final RouteSubmissionMapper submissionMapper;
+    private final RouteDetailRevisionMapper revisionMapper;
 
     public RouteImportService(TwoBuluClient twoBuluClient,
                               SixFootClient sixFootClient,
@@ -41,7 +45,8 @@ public class RouteImportService {
                               RouteDetailMapper detailMapper,
                               RouteTrackPointMapper trackMapper,
                               RouteMarkerMapper markerMapper,
-                              RouteSubmissionMapper submissionMapper) {
+                              RouteSubmissionMapper submissionMapper,
+                              RouteDetailRevisionMapper revisionMapper) {
         this.twoBuluClient = twoBuluClient;
         this.sixFootClient = sixFootClient;
         this.routeMapper = routeMapper;
@@ -49,6 +54,7 @@ public class RouteImportService {
         this.trackMapper = trackMapper;
         this.markerMapper = markerMapper;
         this.submissionMapper = submissionMapper;
+        this.revisionMapper = revisionMapper;
     }
 
     /**
@@ -122,6 +128,9 @@ public class RouteImportService {
             e.setMarkerTime(mk.time);
             markerMapper.insert(e);
         }
+
+        // 版本快照 v1：把导入的原始状态存一份，之后社区每次合并都有回滚点
+        writeRevisionV1(re, detail);
 
         log.info("imported route: platform={}, name={}, routeId={}, points={}, markers={}",
                 platform, p.name, routeId, p.trackPoints.size(), p.markers.size());
@@ -220,5 +229,42 @@ public class RouteImportService {
                 new LambdaQueryWrapper<RouteMarkerEntity>()
                         .eq(RouteMarkerEntity::getRouteId, routeId)
                         .orderByAsc(RouteMarkerEntity::getSeq));
+    }
+
+    /**
+     * 写入版本快照 v1（导入的原始状态）。
+     *
+     * 快照格式与 ProposalService 的回滚读取保持一致：
+     * {"route":{...},"detail":{...}}
+     */
+    private void writeRevisionV1(RouteEntity route, RouteDetailEntity detail) {
+        Map<String, Object> r = new LinkedHashMap<>();
+        r.put("name", route.getName());
+        r.put("region", route.getRegion());
+        r.put("distanceKm", route.getDistanceKm());
+        r.put("ascentMeters", route.getAscentMeters());
+        r.put("tags", route.getTags());
+        Map<String, Object> d = new LinkedHashMap<>();
+        d.put("intro_html", detail.getIntroHtml());
+        d.put("content_html", detail.getContentHtml());
+        d.put("traffic_html", detail.getTrafficHtml());
+        d.put("difficulty", detail.getDifficulty());
+        d.put("risk", detail.getRisk());
+        d.put("suitable_months", detail.getSuitableMonths());
+        d.put("road_type", detail.getRoadType());
+        d.put("view_type", detail.getViewType());
+        d.put("duration_name", detail.getDurationName());
+        Map<String, Object> snap = new LinkedHashMap<>();
+        snap.put("route", r);
+        snap.put("detail", d);
+
+        RouteDetailRevisionEntity rev = new RouteDetailRevisionEntity();
+        rev.setRouteId(route.getId());
+        rev.setVersion(1);
+        rev.setSnapshotJson(new tools.jackson.databind.ObjectMapper().writeValueAsString(snap));
+        rev.setProposerName(detail.getSourceAuthor());
+        rev.setReason("导入初始版本");
+        rev.setCreatedAt(LocalDateTime.now());
+        revisionMapper.insert(rev);
     }
 }

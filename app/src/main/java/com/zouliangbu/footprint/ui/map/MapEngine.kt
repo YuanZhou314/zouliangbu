@@ -37,4 +37,22 @@ interface MapEngine {
      * 记录中每秒调一次，带动画会一顿一顿；改缩放会让用户刚放大的视野被重置。
      */
     fun followTo(point: MapPoint)
+
+    /** 切换底图类型。[type] 为 [MapType] 枚举，实现内部映射到厂商常量。 */
+    fun setMapType(type: MapType)
+
+    /** 放大一级。 */
+    fun zoomIn()
+
+    /** 缩小一级。 */
+    fun zoomOut()
+}
+
+/** 底图类型，与厂商无关（高德 MAP_TYPE_* / osmdroid tile source）。 */
+enum class MapType {
+    /** 标准矢量地图。 */
+    NORMAL,
+
+    /** 卫星影像。 */
+    SATELLITE
 }

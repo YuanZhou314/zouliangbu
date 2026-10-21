@@ -22,7 +22,8 @@ fun MapViewWrapper(
     modifier: Modifier = Modifier,
     track: List<MapPoint> = emptyList(),
     showEndpoints: Boolean = false,
-    autoZoom: Boolean = false
+    autoZoom: Boolean = false,
+    onEngineReady: ((MapEngine) -> Unit)? = null
 ) {
     val context = LocalContext.current
     if (AmapKey.isConfigured(context)) {
@@ -30,7 +31,8 @@ fun MapViewWrapper(
             modifier = modifier,
             track = track,
             showEndpoints = showEndpoints,
-            autoZoom = autoZoom
+            autoZoom = autoZoom,
+            onEngineReady = onEngineReady
         )
     } else {
         OsmMapView(modifier)

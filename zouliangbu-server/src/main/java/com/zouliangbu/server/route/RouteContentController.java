@@ -117,7 +117,10 @@ public class RouteContentController {
                         : java.util.Arrays.stream(re.getTags().split(","))
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())
-                        .toList()));
+                        .toList(),
+                // 社区维护入口要显示的字段（只增不改，老 App 忽略即可）
+                detail != null && detail.getVersion() != null ? detail.getVersion() : 1,
+                detail != null ? nz(detail.getCuratorName()) : ""));
     }
 
     private static String nz(String s) {
@@ -157,7 +160,8 @@ public class RouteContentController {
                        String roadType, String viewType,
                        double distanceKm, int ascentMeters, String durationName,
                        int trackPointCount, int markerCount,
-                       String coverUrl, int coverStyle, List<String> tags) {}
+                       String coverUrl, int coverStyle, List<String> tags,
+                       int version, String curatorName) {}
 
     record TrackPointDto(int seq, double lat, double lng,
                          Double altitude, Double speed, Long time) {}

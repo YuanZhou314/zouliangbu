@@ -294,3 +294,45 @@ App P1 收尾  →  S4（2 天，让内容从假变真）
 
 **唯一不变的原则**：服务端永远不追功能数量，只解决"App 现在缺什么数据"。
 缺就补一个接口，不缺就一行代码都别写。
+
+---
+
+## 11. 社区共维护（2026-10-21 落地）
+
+设计口径见 `docs/product-philosophy.md`：**记录私有、线路公共、社交不做**。
+线路不开放自由创作，只做「提案 + 认票 + 版本回滚」。
+
+| 提案类型 | 事实来源 | 处理 |
+|---|---|---|
+| IMPORT 外部导入 | 第三方 | 管理员**合规**审核（不是事实审核） |
+| UPLOAD 自有轨迹 | 提交者本人 | 规则层校验 → 建线（`upload-autopublish` 默认 false，走人工） |
+| EDIT 勘误 | 亲历者 | OBJECTIVE 类达认票阈值自动合并；SUBJECTIVE/PRIVACY 必须人工 |
+
+关键机制：
+
+1. **认票**：提案人自动一票，阈值默认 2（= 提案人 + 另一人确认）。可改票，反对票直接阻塞自动合并。
+2. **版本**：每次合并 `route_detail.version` +1，同时写 `route_detail_revision` 全量快照。
+3. **冲突**：提案的 `base_version` ≠ 当前版本 → `CONFLICT`，不覆盖。
+4. **回滚**：`POST /api/v1/admin/proposals/routes/{id}/rollback {version}`，版本号继续 +1。
+5. **防刷**：同一 `proposer_uuid` 每小时上限 `rate-limit-per-hour`(10)。
+
+表：`content_proposal` / `content_vote` / `route_detail_revision`（V7，sqlite+mysql 双份）。
+旧的 `route_submission` 数据在 V7 里已平移成 `IMPORT` 提案，旧后台页面照常可用。
+
+### 接口与入口（已接通，不是骨架）
+
+| 层 | 位置 | 说明 |
+|---|---|---|
+| 公开 API | `POST/GET /api/v1/proposals`、`POST /api/v1/proposals/{id}/vote` | 免登录，身份是客户端设备 UUID |
+| 管理 API | `GET /api/v1/admin/proposals`、`/approve`、`/reject`、`/routes/{id}/revisions`、`/rollback` | 走 AdminAuthInterceptor |
+| 线路详情 | `GET /api/v1/routes/{id}` | 追加 `version` / `curatorName`（只增不改） |
+| 管理后台 | `static/admin/proposals.html` | 按状态筛选、通过/驳回 |
+| App | `ui/routes/RouteMaintenanceSection.kt`、`ui/tracks/TrackCompareCard.kt`、`ContributeTrackDialog.kt` | 勘误/认票、同路段对比、轨迹贡献 |
+
+### 还没做
+
+- 提案评论（目前只有认票，没有讨论位）——有争议时只能靠管理员裁决
+- 审核页看不到字段级 diff：`ProposalRow` 没返回 `payloadJson`（轨迹 payload 可能很大，
+  要加就加摘要字段，别无脑塞原文）
+- 到点自动合并的定时任务：现在只在「有人投票」时触发，凑够票但没人再动就会停在 PENDING
+  等管理员。真要无人值守，加一个 `@Scheduled` 扫描 PENDING 即可

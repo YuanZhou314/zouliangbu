@@ -153,7 +153,11 @@ data class RouteDetail(
     val markerCount: Int = 0,
     val coverUrl: String? = null,
     val coverStyle: Int = 0,
-    val tags: List<String> = emptyList()
+    val tags: List<String> = emptyList(),
+    /** 线路版本（社区维护每次合并 +1）。服务端老版本可能不返回，默认 1。 */
+    val version: Int = 1,
+    /** 最后一次维护者昵称（社区贡献者 / 管理员）。 */
+    val curatorName: String? = null
 )
 
 /** 轨迹点 DTO。 */

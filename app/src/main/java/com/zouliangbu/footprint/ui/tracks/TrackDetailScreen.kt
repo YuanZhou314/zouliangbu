@@ -19,15 +19,20 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -73,6 +78,11 @@ fun TrackDetailScreen(
     val ui by vm.state.collectAsStateWithLifecycle()
     val session = ui.session
     val title = session?.name ?: session?.let { formatDate(it.startTime) } ?: "轨迹详情"
+
+    var showCompare by remember { mutableStateOf(false) }
+    var showContribute by remember { mutableStateOf(false) }
+    var submitting by remember { mutableStateOf(false) }
+    var contributeError by remember { mutableStateOf<String?>(null) }
 
     Column(Modifier.fillMaxSize()) {
         // 顶栏：全屏页没有 Scaffold，状态栏 inset 自己加
@@ -180,7 +190,58 @@ fun TrackDetailScreen(
                 ?.let { "含暂停 ${TimeFmt.elapsed(it)}" },
             ascentText = ascentText(ui.ascentMeters, ui.descentMeters),
             paceText = paceText(ui.paceStats),
-            splits = ui.splits
+            splits = ui.splits,
+            onCompare = { showCompare = true },
+            onContribute = { showContribute = true }
+        )
+    }
+
+    // ===== 与上次对比（共同路段）=====
+    if (showCompare) {
+        AlertDialog(
+            onDismissRequest = { showCompare = false },
+            title = { Text("与上次对比", fontSize = 17.sp) },
+            text = {
+                // 还没算完时给一句说明，不要弹个空白对话框
+                if (!ui.compare.checked) {
+                    Text("正在比对历史记录…", fontSize = 13.sp)
+                } else {
+                    TrackCompareCard(compare = ui.compare, modifier = Modifier.padding(0.dp))
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showCompare = false }) { Text("知道了") }
+            }
+        )
+    }
+
+    // ===== 贡献到线路库 =====
+    if (showContribute) {
+        ContributeTrackDialog(
+            defaultName = session?.name ?: (session?.let { formatDate(it.startTime) } ?: ""),
+            submitting = submitting,
+            error = contributeError,
+            onDismiss = {
+                showContribute = false
+                contributeError = null
+            },
+            onSubmit = { name, region, intro, nickname ->
+                if (ui.rawPointCount < 10) {
+                    contributeError = "这条轨迹只有 ${ui.rawPointCount} 个点，至少需要 10 个点"
+                } else {
+                    submitting = true
+                    contributeError = null
+                    vm.contribute(name, region, intro, nickname) { result ->
+                        submitting = false
+                        result.onSuccess {
+                            showContribute = false
+                            Toast.makeText(context, "已提交，等管理员确认后上线", Toast.LENGTH_LONG).show()
+                        }.onFailure {
+                            contributeError = it.message ?: "提交失败，请稍后再试"
+                        }
+                    }
+                }
+            }
         )
     }
 }
@@ -195,7 +256,9 @@ private fun StatsPanel(
     pausedText: String?,
     ascentText: String,
     paceText: String,
-    splits: List<TrackSplits.Split>
+    splits: List<TrackSplits.Split>,
+    onCompare: () -> Unit,
+    onContribute: () -> Unit
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -241,6 +304,21 @@ private fun StatsPanel(
             if (splits.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 SplitList(splits)
+            }
+
+            // 社区维护入口：对比是"我的"做深，贡献是"我的"变成公共价值（见 product-philosophy）
+            Spacer(Modifier.height(6.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                TextButton(onClick = onCompare) {
+                    Text("与上次对比", fontSize = 13.sp)
+                }
+                TextButton(onClick = onContribute) {
+                    Text("贡献到线路库", fontSize = 13.sp)
+                }
             }
         }
     }

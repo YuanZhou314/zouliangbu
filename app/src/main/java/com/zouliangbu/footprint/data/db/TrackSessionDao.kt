@@ -74,6 +74,16 @@ interface TrackSessionDao {
     )
     suspend fun updateAscent(id: Long, ascent: Double, descent: Double)
 
+    /**
+     * 最近 N 条已结束会话（排除自己），用于「与上次对比」找可比对象。
+     *
+     * 不做 SQL 层的"同一条线"判断——那需要几何匹配，SQLite 做不了；
+     * 这里只按时间取一个候选窗口，具体比对交给 SegmentMatch（纯 Kotlin）。
+     */
+    @Query("SELECT * FROM track_sessions WHERE endTime IS NOT NULL AND id != :excludeId " +
+            "ORDER BY startTime DESC LIMIT :limit")
+    suspend fun recentCompleted(excludeId: Long, limit: Int): List<TrackSession>
+
     @Query("DELETE FROM track_sessions WHERE id = :id")
     suspend fun deleteById(id: Long)
 }

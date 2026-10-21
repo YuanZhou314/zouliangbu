@@ -9,6 +9,51 @@
 
 ---
 
+## [2026-10-21] 社区共维护提案机制 + 同路段对比
+
+**产品口径**（`docs/product-philosophy.md`）：记录私有、线路公共、社交不做。
+个人轨迹是数据不是内容，优先把「我的」做深；社区只维护线路，且不开放自由建线。
+
+**服务端**（V7 迁移，sqlite+mysql）：
+- 三张表 `content_proposal` / `content_vote` / `route_detail_revision`；`route_detail` 加 version/curator_name/updated_at。
+- `ProposalService`：提案三型（IMPORT / UPLOAD / EDIT）；客观勘误达认票阈值自动合并；
+  冲突按 base_version 判；每次合并写全量快照；回滚版本号继续 +1。
+- 公开接口 `/api/v1/proposals`（免登录，设备 UUID 当身份）+ 管理接口 `/api/v1/admin/proposals`。
+- 规则层校验 UPLOAD（点数/国境坐标/时间戳递增），不合格直接 400，不进人工队列。
+- `route_submission` 历史数据在 V7 里平移成 IMPORT 提案，旧后台页面不受影响。
+
+**App**：`util/SegmentMatch.kt` + 单测（7 例），同一条路线多次记录的共同路段匹配与对比。
+`docs/route-comparison-design.md` 记录算法与待做项；UI 入口见同日下一条，逐公里对比仍未做。
+
+**踩过的坑**（都写进 CLAUDE.md 了）：
+1. `uk_revision(route_id, version)` 唯一索引 → 测试不清库会撞车，表现为 500 而不是断言失败。
+2. 测试类共享同一个内存库：ProposalApiTest 写完 route 1 的详情不清，会让 ContentApiTest 的
+   「最新收录」分组多一条而随机失败 → 加 `@AfterEach` 清理。
+3. 轨迹端点正好落在折线顶点时，只记「命中段序号」会随机多算/少算一整段（100 m），
+   必须记段的参数 t 再换算成顶点索引。
+4. javac 对 `Map.of` 12 参数 + 嵌套转义字符串的报错位置离真实原因很远（报「需要';'」），
+   测试里构造 JSON 一律用字符串拼接。
+
+## [2026-10-21] 社区共维护 UI（App + 管理后台）
+
+上一轮只做了服务端，这轮把入口补齐（不加新表、不加新接口，只消费已有接口）：
+
+| 入口 | 文件 | 行为 |
+|---|---|---|
+| 线路详情「社区维护」 | `ui/routes/RouteMaintenanceSection.kt` | 版本/维护者 + 待处理勘误列表 + 认可/反对 + 提勘误对话框 |
+| 轨迹详情「与上次对比」 | `ui/tracks/TrackCompareCard.kt` | 找同一条线的历史记录，只比共同路段（时长/爬升/均速） |
+| 轨迹详情「贡献到线路库」 | `ui/tracks/ContributeTrackDialog.kt` | 名称/地区/说明/昵称 → UPLOAD 提案 |
+| 管理后台「社区提案」 | `static/admin/proposals.html` | 按状态筛选、通过/驳回 |
+
+数据层：`data/remote/ProposalApi.kt`、`data/repo/ProposalRepository.kt`、`data/DeviceId.kt`。
+服务端 `GET /api/v1/routes/{id}` 追加 `version` / `curatorName` 两个字段（只增不改）。
+
+坑：
+1. TS 模板串里写 `\n` 会变成真实换行并打断 Kotlin 字符串（`ContributeTrackDialog` 撞了一次），
+   要写 `\\n`。
+2. `Modifier.matchParentSize()` 是 BoxScope 成员，不要 import。
+3. 对比不能全量两两比：先按起终点 <300 m + 距离差 <40% 粗筛，再进几何匹配。
+
 ## [2026-10-21] 管理后台扩展：从「只有路线审核」到 7 模块骨架
 
 - **新包 `com.zouliangbu.server.admin`**：`AdminSupport`（ok/badRequest/notFound/parseId/trimToNull）、
