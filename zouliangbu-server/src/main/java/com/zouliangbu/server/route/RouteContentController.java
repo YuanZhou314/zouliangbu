@@ -24,7 +24,7 @@ public class RouteContentController {
         this.routeMapper = routeMapper;
     }
 
-    /** 提交路线链接（POST）。 */
+    /** 提交路线链接（POST）：支持两步路 / 六只脚，审批通过后才抓取入库。 */
     @PostMapping("/submit")
     public ApiResponse<Long> submit(@RequestBody SubmitRequest req) {
         if (req.sourceUrl() == null || req.sourceUrl().isBlank()) {
@@ -33,13 +33,27 @@ public class RouteContentController {
         if (req.submitterUuid() == null || req.submitterUuid().isBlank()) {
             return ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST, "提交者标识不能为空");
         }
-        Long twoBuluId = TwoBulu.extractRouteId(req.sourceUrl());
-        if (twoBuluId == null) {
-            return ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST, "无法从链接提取路线 id");
+        String sourceRouteId = extractSourceRouteId(req.sourceUrl());
+        if (sourceRouteId == null) {
+            return ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST,
+                    "无法识别的链接，目前仅支持两步路 / 六只脚行程链接");
         }
         // 保存 submission（审批前不落 route）
-        return ApiResponse.ok(saveSubmission(req.sourceUrl(), String.valueOf(twoBuluId),
+        return ApiResponse.ok(saveSubmission(req.sourceUrl(), sourceRouteId,
                 req.submitterUuid(), req.submitterNote()));
+    }
+
+    /** 按平台提取源站 id；不支持或格式异常返回 null。 */
+    static String extractSourceRouteId(String url) {
+        RoutePlatform platform = RoutePlatform.detect(url);
+        if (platform == null) {
+            return null;
+        }
+        Long id = switch (platform) {
+            case TWOBULU -> TwoBulu.extractRouteId(url);
+            case SIXFOOT -> SixFoot.extractTripId(url);
+        };
+        return id == null ? null : String.valueOf(id);
     }
 
     /** 查提交状态。 */

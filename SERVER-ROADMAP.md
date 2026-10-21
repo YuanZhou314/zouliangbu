@@ -30,11 +30,12 @@
 | 项 | 现状 |
 |---|---|
 | 接口 | 4 个只读 GET：`/api/v1/feed`（cursor 分页）、`/api/v1/routes`（推荐位 + 分组 + 关键词）、`/api/v1/gear/categories`、`/api/v1/healthz` |
-| 数据 | 4 张表 + Flyway 迁移（V1 建表 / V2 种子），开发用 H2、生产用 MySQL 8 |
+| 数据 | 4 张表 + 路线内容 4 张表（`route_detail` / `route_track_point` / `route_marker` / `route_submission`）；Flyway 迁移按方言分目录（`db/migration/{sqlite,mysql}` + `common`），开发/测试用 **SQLite**（2026-10-21 由 H2 换掉，重启不丢），生产用 MySQL 8 |
+| 导入 | 两步路 **和** 六只脚行程链接均可提交 → 后台审批 → 抓取解析入库（`RoutePlatform.detect` 按域名自动路由；六只脚不抓脚印图片） |
 | 契约 | 统一 `{code,msg,data}`，错误码 1001/1004/5000，字段名与 App 模型逐字段对齐 |
-| 质量 | 12 个回归测试（含游标翻页不重不漏、4 类非法入参必须 4xx） |
+| 质量 | 36 个测试（12 内容接口 + 3 契约字段 + 8 审批/权限 + 7 六只脚解析 + 6 两步路解密） |
 | 部署 | 单 jar 可跑 / Dockerfile / docker-compose / systemd unit / 一键启动脚本（sh + ps1） |
-| 跨平台 | fat jar 内 **0 个原生二进制**，同一份产物在 Win/Mac(ARM)/Linux 上行为一致 |
+| 跨平台 | 原生库只有 `sqlite-jdbc` 的多平台预编译（含 Linux/Mac aarch64），Win/Mac(ARM)/Linux 同一份产物可跑 |
 
 ### 明显缺口
 

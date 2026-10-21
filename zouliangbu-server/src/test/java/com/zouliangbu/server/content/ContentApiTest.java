@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 
@@ -19,9 +20,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * 用 @SpringBootTest 而不是 @WebMvcTest：要覆盖 Flyway 建表+种子数据+MyBatis-Plus 查询的完整链路，
  * "搜武功搜不到"这类问题恰好出在查询/过滤层，切掉 DB 就测不出来。
- * 默认 dev profile → H2 内存库，每次启动重建，测试之间无脏数据。
+ * test profile → SQLite 共享内存库，每次启动重建，测试之间无脏数据。
  */
 @SpringBootTest
+@ActiveProfiles("test")
 @AutoConfigureMockMvc
 class ContentApiTest {
 

@@ -15,16 +15,13 @@ public class AdminController {
     private final AdminAuthInterceptor adminAuth;
     private final RouteImportService routeImportService;
     private final com.zouliangbu.server.route.mapper.RouteSubmissionMapper submissionMapper;
-    private final TwoBuluClient twoBuluClient;
 
     public AdminController(AdminAuthInterceptor adminAuth,
                            RouteImportService routeImportService,
-                           com.zouliangbu.server.route.mapper.RouteSubmissionMapper submissionMapper,
-                           TwoBuluClient twoBuluClient) {
+                           com.zouliangbu.server.route.mapper.RouteSubmissionMapper submissionMapper) {
         this.adminAuth = adminAuth;
         this.routeImportService = routeImportService;
         this.submissionMapper = submissionMapper;
-        this.twoBuluClient = twoBuluClient;
     }
 
     /** 登录（用固定密码换 token）。 */
@@ -107,15 +104,11 @@ public class AdminController {
         return ApiResponse.ok(routeId);
     }
 
-    /** 解析两步路链接（不入库，只返回解析结果供编辑页填表）。 */
+    /** 解析路线链接（不入库，只返回解析结果供编辑页填表）：两步路 / 六只脚自动识别。 */
     @PostMapping("/parse")
     public ApiResponse<ParseResult> parse(@RequestBody ParseRequest req) {
-        Long twoBuluId = TwoBulu.extractRouteId(req.url());
-        if (twoBuluId == null) {
-            return ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST, "无法从链接提取路线 id");
-        }
         try {
-            TwoBulu.ParsedRoute p = twoBuluClient.fetchRoute(twoBuluId, req.url());
+            RouteData.ParsedRoute p = routeImportService.preview(req.url());
             return ApiResponse.ok(new ParseResult(
                     p.name, p.region,
                     p.totalMileageM / 1000.0,
@@ -123,6 +116,8 @@ public class AdminController {
                     p.difficulty, p.risk, p.suitableMonths, p.roadType,
                     p.introHtml, p.contentHtml, p.trafficHtml,
                     p.trackPoints.size(), p.markers.size()));
+        } catch (IllegalArgumentException e) {
+            return ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST, e.getMessage());
         } catch (Exception e) {
             return ApiResponse.fail(ApiResponse.ErrorCode.SERVER_ERROR, "抓取失败：" + e.getMessage());
         }

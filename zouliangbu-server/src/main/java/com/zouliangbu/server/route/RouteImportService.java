@@ -17,9 +17,10 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 路线导入服务：解析两步路数据，存入 route + route_detail + route_track_point + route_marker。
+ * 路线导入服务：解析第三方路线链接（两步路 / 六只脚），
+ * 存入 route + route_detail + route_track_point + route_marker。
  *
- * 坐标系：TwoBuluClient 内部已把 WGS-84 转成 GCJ-02，本服务直接存 GCJ-02。
+ * 坐标系：各 Client 内部已把 WGS-84 转成 GCJ-02，本服务直接存 GCJ-02。
  */
 @Service
 public class RouteImportService {
@@ -27,6 +28,7 @@ public class RouteImportService {
     private static final Logger log = LoggerFactory.getLogger(RouteImportService.class);
 
     private final TwoBuluClient twoBuluClient;
+    private final SixFootClient sixFootClient;
     private final RouteMapper routeMapper;
     private final RouteDetailMapper detailMapper;
     private final RouteTrackPointMapper trackMapper;
@@ -34,12 +36,14 @@ public class RouteImportService {
     private final RouteSubmissionMapper submissionMapper;
 
     public RouteImportService(TwoBuluClient twoBuluClient,
+                              SixFootClient sixFootClient,
                               RouteMapper routeMapper,
                               RouteDetailMapper detailMapper,
                               RouteTrackPointMapper trackMapper,
                               RouteMarkerMapper markerMapper,
                               RouteSubmissionMapper submissionMapper) {
         this.twoBuluClient = twoBuluClient;
+        this.sixFootClient = sixFootClient;
         this.routeMapper = routeMapper;
         this.detailMapper = detailMapper;
         this.trackMapper = trackMapper;
@@ -49,17 +53,14 @@ public class RouteImportService {
 
     /**
      * 从 URL 导入一条路线（创建 route + 详情 + 轨迹 + 标注）。
+     * 按链接域名自动路由到对应平台抓取器。
      *
      * @return 新创建的 route_id
      */
     @Transactional
     public Long importFromUrl(String sourceUrl) throws Exception {
-        Long twoBuluId = TwoBulu.extractRouteId(sourceUrl);
-        if (twoBuluId == null) {
-            throw new IllegalArgumentException("无法从链接提取路线 id");
-        }
-
-        TwoBulu.ParsedRoute p = twoBuluClient.fetchRoute(twoBuluId, sourceUrl);
+        RouteData.ParsedRoute p = preview(sourceUrl);
+        RoutePlatform platform = RoutePlatform.detect(sourceUrl);
 
         // 1. 插入 route
         RouteEntity re = new RouteEntity();
@@ -89,14 +90,14 @@ public class RouteImportService {
         detail.setDurationName(String.valueOf(Math.round(p.durationHours)));
         detail.setTrackSourceId(p.sourceTrackId);
         detail.setSourceUrl(p.sourceUrl);
-        detail.setSourceName("两步路");
+        detail.setSourceName(platform.displayName);
         detail.setSourceAuthor(p.sourceAuthor);
         detail.setParsedAt(LocalDateTime.now());
         detailMapper.insert(detail);
 
         // 3. 轨迹点
         int seq = 0;
-        for (TwoBulu.TrackPoint tp : p.trackPoints) {
+        for (RouteData.TrackPoint tp : p.trackPoints) {
             RouteTrackPointEntity e = new RouteTrackPointEntity();
             e.setRouteId(routeId);
             e.setSeq(seq++);
@@ -110,7 +111,7 @@ public class RouteImportService {
 
         // 4. 标注点
         seq = 0;
-        for (TwoBulu.Marker mk : p.markers) {
+        for (RouteData.Marker mk : p.markers) {
             RouteMarkerEntity e = new RouteMarkerEntity();
             e.setRouteId(routeId);
             e.setSeq(seq++);
@@ -122,9 +123,39 @@ public class RouteImportService {
             markerMapper.insert(e);
         }
 
-        log.info("imported route: name={}, routeId={}, points={}, markers={}",
-                p.name, routeId, p.trackPoints.size(), p.markers.size());
+        log.info("imported route: platform={}, name={}, routeId={}, points={}, markers={}",
+                platform, p.name, routeId, p.trackPoints.size(), p.markers.size());
         return routeId;
+    }
+
+    /** 只解析不入库（后台"解析预览"用）：按平台分发抓取。 */
+    public RouteData.ParsedRoute preview(String sourceUrl) throws Exception {
+        RoutePlatform platform = RoutePlatform.detect(sourceUrl);
+        if (platform == null) {
+            throw new IllegalArgumentException("暂不支持该链接，目前仅支持两步路 / 六只脚");
+        }
+        return fetch(platform, sourceUrl);
+    }
+
+    /** 按平台抓取并解析（各平台 id 提取规则不同）。 */
+    private RouteData.ParsedRoute fetch(RoutePlatform platform, String sourceUrl) throws Exception {
+        switch (platform) {
+            case TWOBULU -> {
+                Long id = TwoBulu.extractRouteId(sourceUrl);
+                if (id == null) {
+                    throw new IllegalArgumentException("无法从两步路链接提取路线 id");
+                }
+                return twoBuluClient.fetchRoute(id, sourceUrl);
+            }
+            case SIXFOOT -> {
+                Long id = SixFoot.extractTripId(sourceUrl);
+                if (id == null) {
+                    throw new IllegalArgumentException("无法从六只脚链接提取行程 id");
+                }
+                return sixFootClient.fetchTrip(id, sourceUrl);
+            }
+            default -> throw new IllegalArgumentException("暂不支持该链接来源");
+        }
     }
 
     /**

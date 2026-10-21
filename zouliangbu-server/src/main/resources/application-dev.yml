@@ -1,8 +1,15 @@
-# dev：H2 内存库（MODE=MySQL 让 DDL 与生产一致），启动即用，无需 Docker/MySQL。
-# 每次重启数据重置为种子数据，适合联调 UI。
+# dev：SQLite 单文件库（零依赖、免装 DB、重启数据不丢）。
+# 路径可用 SQLITE_PATH 覆盖；默认落在启动目录下的 zlb-dev.db（不依赖子目录，jar 拷到哪都能起）。
+# 连接池必须 1：SQLite 同一时刻只允许一个写者，多连接会 SQLITE_BUSY。
 spring:
   datasource:
-    url: jdbc:h2:mem:zlb;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
-    driver-class-name: org.h2.Driver
-    username: sa
+    url: jdbc:sqlite:${SQLITE_PATH:zlb-dev.db}
+    driver-class-name: org.sqlite.JDBC
+    username: ""
     password: ""
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+      connection-init-sql: PRAGMA busy_timeout = 5000
+  flyway:
+    locations: classpath:db/migration/sqlite,classpath:db/migration/common

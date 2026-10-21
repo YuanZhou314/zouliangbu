@@ -420,6 +420,11 @@ val feedRepository: FeedRepository by lazy { RemoteFeedRepository(api) }
 | ORM | **MyBatis-Plus 3.5.17**（`mybatis-plus-spring-boot4-starter`） | 选它而不是 JPA：SQL 可控、分页/条件构造器够用、不需要学一套 JPQL |
 | 迁移 | **Flyway**（`spring-boot-starter-flyway`） | `V1__init.sql` 建表 + `V2__seed.sql` 灌数据，与 App 的 `MockData.kt` 文案一致 |
 | 数据库 | 开发/测试 **H2 内存库**（`MODE=MySQL`）；生产 **MySQL 8** | 同一套 DDL 两库通用（未用 `ENGINE=` / `CHARSET=` 等 MySQL 专属语法） |
+
+> **2026-10-21 变更（覆盖上表这一行）**：开发/测试库 **H2 → SQLite**（用户决定：刚起步测试阶段用单文件库更省事，
+> 数据落盘、重启不丢；后续直接换 PostgreSQL，不再回 MySQL 系）。
+> 迁移脚本因此拆成 `db/migration/{sqlite,mysql}` + `common`，两份 DDL 只差自增主键写法
+> （SQLite 必须 `INTEGER PRIMARY KEY AUTOINCREMENT`）。prod 仍为 MySQL 8（`application-prod.yml` 未改）。
 | 打包 | `zouliangbu-server-0.1.0.jar`（30MB，内嵌 Tomcat） | `java -jar` 直接跑，不需要装 Tomcat |
 
 ### 12.2 目录结构

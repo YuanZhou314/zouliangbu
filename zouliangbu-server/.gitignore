@@ -6,3 +6,9 @@ target/
 .env
 data/
 *.log
+
+# 本地 SQLite 库文件（dev/test 各一份，含运行期数据）
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

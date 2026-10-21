@@ -2,12 +2,18 @@
 
 App 内容层（首页动态 / 线路 / 装备分类）的后端。**轨迹数据不上云**，这里不含任何轨迹表。
 
-- 技术栈：Java 17 + Spring Boot 4.1.1 + MyBatis-Plus 3.5.17（boot4 starter）+ Flyway + MySQL 8 / H2
+- 技术栈：Java 17 + Spring Boot 4.1.1 + MyBatis-Plus 3.5.17（boot4 starter）+ Flyway + SQLite（dev/test）/ MySQL 8（prod）
 - 接口版本：`/api/v1`，统一响应 `{ code, msg, data }`
+- 路线导入：用户提交**两步路 / 六只脚**行程链接 → 后台审批 → 抓取解析入库（`route` + `route_detail` + `route_track_point`）
 
 ## 一、本地跑（零依赖，推荐先这样验）
 
-dev profile 用 H2 内存库 + Flyway 自动建表灌种子数据，**不需要 Docker、不需要装 MySQL、不需要装 Maven 之外的任何东西**。
+dev profile 用 **SQLite 单文件库**（`zouliangbu-server/zlb-dev.db`，已被 gitignore）+ Flyway 自动建表灌种子数据，
+**不需要 Docker、不需要装 MySQL、不需要装 Maven 之外的任何东西**；重启服务数据不丢（这是选 SQLite 而不是 H2 内存库的原因）。
+
+要换库文件位置就设环境变量：`SQLITE_PATH=/var/lib/zlb/zlb.db`。
+注意 SQLite 是单写者模型，连接池必须为 1（`application-dev.yml` 已设 `maximum-pool-size: 1` + `busy_timeout`），
+**不要为了"提高并发"把它调大**，否则会撞 `SQLITE_BUSY`。
 
 最省事（自动校验 JDK、打包、检查端口）：
 
@@ -56,6 +62,29 @@ MySQL 与 api 同 compose 内网，3306 **不对外暴露**。正式对外请在
 | GET | `/api/v1/routes` | `keyword`、`city` | 线路目录（推荐位 + 分组）；有关键词时隐藏推荐位 |
 | GET | `/api/v1/gear/categories` | — | 装备分类（静态，可长缓存） |
 | GET | `/api/v1/healthz` | — | 存活检查 |
+
+### 路线内容（导入 / 审批）
+
+| 方法 | 路径 | 参数 / Body | 说明 |
+|---|---|---|---|
+| POST | `/api/v1/routes/submit` | `{sourceUrl, submitterUuid, submitterNote}` | 用户提交**两步路或六只脚**行程链接；只存待审记录，不抓取 |
+| GET | `/api/v1/routes/submissions/{id}` | — | 查提交状态：`PENDING` / `APPROVED` / `REJECTED` |
+| GET | `/api/v1/routes/{id}` | — | 线路详情（正文 / 交通 / 难度 / 距离 / 爬升 / 点数） |
+| GET | `/api/v1/routes/{id}/track` | — | 轨迹点（GCJ-02） |
+| GET | `/api/v1/routes/{id}/markers` | — | 标注点（六只脚暂无标注点，返回空数组） |
+| POST | `/api/v1/admin/login` | `{password}` | 换 `X-Admin-Token`（默认密码见 `application.yml`） |
+| GET | `/api/v1/admin/submissions?status=PENDING` | 头 `X-Admin-Token` | 待审批列表 |
+| POST | `/api/v1/admin/submissions/{id}/approve` | 同上 | **审批通过 → 真抓取解析 → 落 route/详情/轨迹/标注** |
+| POST | `/api/v1/admin/submissions/{id}/reject` | `{reason}` | 驳回 |
+| POST | `/api/v1/admin/parse` | `{url}` | 只解析不入库（编辑页预览用） |
+
+支持的链接形式：
+
+- 两步路：`https://www.2bulu.com/mc/route/detail?id=<id>`
+- 六只脚：`https://www.foooooot.com/trip/<id>/`、`https://www.foooooot.com/mobile/trip/<id>/`
+
+平台按域名自动识别（`RoutePlatform.detect`），未知域名在提交阶段直接 1001。
+六只脚只取行程详情 / 正文 / 数字与轨迹，**脚印图片不抓**（正文里的 `<img>` 会被剥掉）。
 
 响应示例：
 
@@ -140,13 +169,15 @@ mvn -s maven-settings.xml test
 判断依据不是"试一下"，是下面这条可验证的事实：
 
 ```bash
-# 扫描 fat jar 里有没有原生库（.so/.dll/.dylib/.jnilib）
-unzip -l target/zouliangbu-server-0.1.0.jar | grep -icE "\.(so|dll|dylib|jnilib)$"
-# → 0
+# 看 jar 里的原生库覆盖了哪些平台（换成 H2 时代这里是 0 条）
+unzip -l target/zouliangbu-server-0.1.0.jar | grep -E "org/sqlite/native/(Linux|Mac|Windows)/[a-z0-9_]+/" | head
+# → Linux/aarch64、Mac/aarch64 都在列
 ```
 
-**jar 内 60 个依赖、0 个原生二进制**，全是纯 Java 字节码（Spring / Tomcat 内嵌 / MyBatis-Plus /
-H2 / MySQL Connector-J 都没有 JNI）。字节码与 CPU 架构无关 → **arm64 上直接跑**。
+**jar 内的原生二进制只剩 `sqlite-jdbc` 自带的那批**（`org/sqlite/native/{Linux,Linux-Musl,Mac,Windows}/{x86_64,aarch64,...}`），
+它们是**同一 jar 内的多平台预编译库**，运行期按 OS/CPU 自动挑一个加载，不需要你装任何系统包。
+覆盖 Linux x86_64 / **Linux aarch64** / Mac x86_64 / **Mac aarch64(M 系)** / Windows x86_64 → **arm64 服务器上直接跑**。
+（用 MySQL 跑 prod 时 sqlite-jdbc 不会加载任何 native 库。）
 
 唯一要求：装 **arm64 的 JDK 17**（不要装成 x86 版走 Rosetta，能跑但明显慢）。
 
@@ -181,14 +212,17 @@ curl http://127.0.0.1:8080/api/v1/healthz
 `deploy/zouliangbu-server.service` 里数据库密码建议改成 `EnvironmentFile=/etc/zlb/db.env`（`chmod 600`），
 否则 `systemctl show` 能看到明文。
 
-**B. 暂时没有 MySQL → 直接用 dev profile（H2 内存库）**
+**B. 暂时没有 MySQL → 直接用 dev profile（SQLite 文件库）**
 
 ```bash
 java -jar zouliangbu-server-0.1.0.jar --spring.profiles.active=dev --server.port=8080
+# 库文件默认落在当前目录 zlb-dev.db；想放别处：
+SQLITE_PATH=/var/lib/zlb/zlb.db java -jar zouliangbu-server-0.1.0.jar --spring.profiles.active=dev --server.port=8080
 ```
 
-能跑、有完整种子数据，**但重启后数据回到种子状态**。内容这个阶段本来就来自 Flyway 种子 + 只读，
-所以完全够用；等要录入真实内容了再上 MySQL。
+能跑、有完整种子数据，**重启后数据仍在**（与 H2 内存库不同），单人测试/试运行阶段够用。
+要备份就 `cp zlb-dev.db zlb-dev.db.bak`（服务运行中也可，SQLite 单文件整库快照）；
+数据量/并发上来再切 MySQL（prod profile），库里已有的内容可用后台"重新解析"接口重建。
 
 **C. 想用 Docker（需要 Docker 可用）**
 

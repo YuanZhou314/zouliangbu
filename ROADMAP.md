@@ -233,7 +233,7 @@ P2「从能用到敢用」进度 **5/8**：2.1 迁移策略、2.2 悬挂恢复�
 | 项 | 结论 |
 |---|---|
 | 语言/框架 | **Java 17 + Spring Boot 4.1.1**（4.x 的 starter 改名为 `-webmvc`，Flyway 要独立 starter） |
-| 数据层 | **MyBatis-Plus 3.5.17**（`mybatis-plus-spring-boot4-starter`）+ **Flyway** 迁移 + 开发/测试用 H2(`MODE=MySQL`)、生产 **MySQL 8** |
+| 数据层 | **MyBatis-Plus 3.5.17**（`mybatis-plus-spring-boot4-starter`）+ **Flyway** 迁移 + 开发/测试用 **SQLite**（单文件库，重启不丢，2026-10-21 由 H2 换掉）、生产 **MySQL 8**（后续计划换 PostgreSQL） |
 | 部署 | 单机 Docker Compose（nginx + api + mysql），2C2G 轻量约 ¥60–100/月 |
 | 接口 | `/api/v1/feed`、`/api/v1/routes`、`/api/v1/gear/categories`、`/api/v1/healthz`；统一 `{code,msg,data}`，cursor 分页 |
 | 进度 | **S1–S3 已完成并验证**（4 接口跑通 + 12 个回归测试全绿）；**S4 App 侧 Retrofit 已接入**（`RemoteFeedRepository` / `RemoteRouteRepository` / `RemoteGearRepository`，网络失败自动回退 Mock）；**S5 半程**：2026-10-21 已部署云服务器 `82.156.84.127:8080`（四接口 curl 验证），App `BASE_URL` 已切换 + 明文 HTTP 已放行；HTTPS / 备份 / 监控待做 |

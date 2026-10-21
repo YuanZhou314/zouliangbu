@@ -9,6 +9,74 @@
 
 ---
 
+## [2026-10-21] 双平台路线导入（两步路 + 六只脚）+ 数据库 H2 → SQLite
+
+### 触发
+用户要求：① 两步路**和**六只脚的链接都允许用户自行提交，服务端审批后再解析入库；
+② 数据库从 H2 换成 SQLite（"刚起步测试用 sqlite，后面再换 pg"）。
+
+### 一、六只脚支持（新增 4 文件，改造 4 文件）
+
+数据源（实测 `trip/100142397` 验证，均无需登录）：
+
+| 用途 | 请求 | 说明 |
+|---|---|---|
+| 行程详情 | `GET https://www.foooooot.com/trip/{id}/` | 服务端渲染 HTML，可正则直取 |
+| 轨迹 | `GET https://www.foooooot.com/v4/api/trip/{id}/trackjson` | `[[[ts,lat,lng,alt,speed,cumdist_km],...]]`，多段为数组套数组，**WGS-84** |
+
+页面锚点（`SixFoot.parsePage`）：`<h1 class="title">` 标题、`/userindex/{uid}/` 作者、
+`全程&nbsp;11.6&nbsp;公里` 距离、`累计上升/下降` 爬升、`class="low"/"height"` 海拔极值、
+`难度级别：` 难度、`历时 X hours, Y minutes` 用时、`<div class="trip_box_description">` 正文。
+
+关键实现：
+
+1. **抽通用载体 `RouteData`**（`ParsedRoute` / `TrackPoint` / `Marker`）——原来这三个类内嵌在 `TwoBulu` 里，
+   六只脚复用不了。现在两个平台的 Client 都产出 `RouteData.ParsedRoute`，`RouteImportService` 落库逻辑零分叉。
+2. **`RoutePlatform.detect(url)`** 按域名路由（`2bulu.com` / `foooooot.com`），未知域名在提交阶段就 1001。
+3. **`SixFootClient`** 抓页面 + 轨迹；坐标统一用已有 `CoordTransform.wgs84ToGcj02` 转 GCJ-02。
+4. **脚印图片一律剥掉**（用户明确要求）：`SixFoot.stripFootprintImages` 删正文里所有 `<img>`。
+   六只脚无标注点接口 → `markers` 为空数组。
+5. 提交/审批链路无需改表：`route_submission` 的 `source_route_id` 存六只脚 tripId，
+   `route_detail.source_name` 由硬编码"两步路"改为按平台写入（`两步路` / `六只脚`）。
+
+### 二、数据库 H2 → SQLite
+
+- 依赖：去 `com.h2database:h2`，加 `org.xerial:sqlite-jdbc:3.50.3.0`。
+  **Flyway 12.4 的 core 已内置 SQLite 方言**（jar 里有 `org/flywaydb/core/internal/database/sqlite/*`），
+  不存在 `flyway-database-sqlite` 这个构件，别再去找。
+- 迁移脚本按方言分目录（Flyway 同一 locations 会撞重复版本号，所以不用 `{vendor}` 占位符，profile 里显式指定）：
+  ```
+  db/migration/sqlite/{V1__init,V3__route_content}.sql
+  db/migration/mysql/{V1__init,V3__route_content}.sql
+  db/migration/common/V2__seed.sql      # 纯 INSERT，两库语法通吃
+  ```
+  SQLite 版唯一差异：`BIGINT AUTO_INCREMENT PRIMARY KEY` → `INTEGER PRIMARY KEY AUTOINCREMENT`。
+- `application-dev.yml`：`jdbc:sqlite:${SQLITE_PATH:zlb-dev.db}`，`maximum-pool-size: 1` +
+  `connection-init-sql: PRAGMA busy_timeout = 5000`（SQLite 单写者，池调到 >1 必撞 SQLITE_BUSY）。
+  库文件放启动目录（不依赖 `data/` 子目录，jar 拷哪都能起），已 gitignore `*.db*`。
+- `application-test.yml`（新增）+ 测试类 `@ActiveProfiles("test")`：
+  `jdbc:sqlite:file:zlb-test?mode=memory&cache=shared`，保证 `mvn test` 每次从 Flyway 建表开始，
+  且**不会写进 dev 的实体库文件**。
+- prod 仍是 MySQL 8，只把 `flyway.locations` 指向 `mysql,common`。
+
+### 三、验证（全部实测，非推测）
+
+| 项 | 结果 |
+|---|---|
+| `mvn test` | **36/36 绿**（内容 15 + 审批/权限 8 + 六只脚 7 + 两步路 6） |
+| 六只脚全链路 | submit(`mobile/trip/100142397`) → approve → routeId=13，2795 个轨迹点入库，距离 11.6km / 爬升 647m / 海拔 8–119m / 作者"醉♥客" / 正文无 `<img>` |
+| 两步路回归 | `/admin/parse?id=244439` 正常返回 17.893km / 1652m / 挑战 |
+| 未知域名 | 提交 `example.com` → 1001「目前仅支持两步路 / 六只脚行程链接」 |
+| SQLite 落库 | `zlb-dev.db` 288KB，13 条 route + 2795 轨迹点；`flyway_schema_history` 记录 1/2/3 全部 success |
+| **重启持久化** | 杀进程重启后 `GET /routes/13` 仍返回完整数据（H2 内存库时代做不到） |
+
+### 四、顺手修的老问题
+
+`TwoBuluClient.extractRegion` 取名字前 3 字再截断，导致"深圳户外毕业线三水线…"→`深圳户`（后缀"户外"落在截断之外）。
+改为前 8 字内找后缀，现在返回 `深圳`。
+
+---
+
 ## [2026-10-21] App 接入云服务器（S5 半程）：BASE_URL 切换 + 明文 HTTP 放行
 
 ### 触发

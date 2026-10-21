@@ -311,7 +311,18 @@
   null 会让 kotlinx.serialization 直接抛异常。
 - **轨迹数据永不上云**：服务端只有内容表（feed_post / route_section / route / gear_category）。
 - 响应统一 `{code,msg,data}`；客户端传错走 4xx（code 1001/1004），服务端故障走 500（code 5000）。
-- 改表：只新增 `V{n}__xxx.sql`，**不要改已执行的 V1/V2**。
+- 改表：只新增 `V{n}__xxx.sql`，**不要改已执行的 V1/V2/V3**。
+- **迁移脚本按方言分目录**（2026-10-21 起）：`db/migration/sqlite/`、`db/migration/mysql/`、`db/migration/common/`。
+  `{vendor}` 占位符没用，**locations 在 profile 里显式指定**：dev/test → `sqlite,common`；prod → `mysql,common`。
+  写新迁移时：纯数据（INSERT/UPDATE）放 `common`，DDL 两边各写一份；SQLite 自增主键必须写
+  `INTEGER PRIMARY KEY AUTOINCREMENT`（`BIGINT AUTO_INCREMENT` 在 SQLite 里不自增，且是语法错误）。
+- **SQLite 连接池必须 1**（`maximum-pool-size: 1` + `PRAGMA busy_timeout=5000`）：SQLite 单写者模型，
+  调大必然撞 `SQLITE_BUSY`。dev 库文件 `zouliangbu-server/zlb-dev.db`（gitignore），可用 `SQLITE_PATH` 改路径。
+- **测试必须 `@ActiveProfiles("test")`**：test profile 用 `jdbc:sqlite:file:zlb-test?mode=memory&cache=shared`，
+  不写就会写进 dev 的实体库文件、且数据跨次累积。
+- **路线导入走平台路由**：`RoutePlatform.detect(url)` → `TWOBULU`（`2bulu.com`）/ `SIXFOOT`（`foooooot.com`），
+  解析结果统一填 `RouteData.ParsedRoute`（GCJ-02）。加新平台 = 枚举 + `RouteImportService.fetch` 分支 + 一个 Client。
+  六只脚**只取行程详情/正文/数字/轨迹，脚印图片一律剥掉**（`SixFoot.stripFootprintImages`）。
 - 接口字段名必须与 App 的 `data/model/*.kt` 逐字段一致——这样换 Remote 实现时 UI/ViewModel 零改动。
 
 ## 构建 & 调试

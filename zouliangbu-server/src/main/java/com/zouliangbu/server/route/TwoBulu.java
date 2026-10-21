@@ -1,7 +1,5 @@
 package com.zouliangbu.server.route;
 
-import java.util.ArrayList;
-import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -43,49 +41,5 @@ public final class TwoBulu {
         return new String(out, java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    /** 单个轨迹点（GCJ-02）。 */
-    public static final class TrackPoint {
-        public double lat;
-        public double lng;
-        public double altitude;
-        public double speed;
-        public long time;
-    }
-
-    /** 单个标注点（GCJ-02）。 */
-    public static final class Marker {
-        public String name;
-        public double lat;
-        public double lng;
-        public double altitude;
-        public long time;
-    }
-
-    /** 路线详情（已转换为 GCJ-02）。 */
-    public static final class ParsedRoute {
-        public String name;
-        public String region;
-        public double totalMileageM;
-        public double maxAltitudeM;
-        public double cumulativeClimbM;
-        public double cumulativeDeclineM;
-        public double durationHours;
-        public String difficulty;
-        public String risk;
-        public String suitableMonths;
-        public String roadType;
-        public String viewType;
-        public String introHtml;
-        public String contentHtml;
-        public String trafficHtml;
-        public String sourceUrl;
-        public String sourceAuthor;
-        public long sourceTrackId;
-        public double latStart;
-        public double lngStart;
-        public double latEnd;
-        public double lngEnd;
-        public List<TrackPoint> trackPoints = new ArrayList<>();
-        public List<Marker> markers = new ArrayList<>();
-    }
+    // 解析结果载体见 RouteData（两步路 / 六只脚共用），本类只保留平台特有的抓取规则。
 }

@@ -45,8 +45,8 @@ public class TwoBuluClient {
      * @param routeId 两步路路线 id
      * @param sourceUrl 原始链接（存入 source_url）
      */
-    public TwoBulu.ParsedRoute fetchRoute(long routeId, String sourceUrl) throws Exception {
-        TwoBulu.ParsedRoute result = new TwoBulu.ParsedRoute();
+    public RouteData.ParsedRoute fetchRoute(long routeId, String sourceUrl) throws Exception {
+        RouteData.ParsedRoute result = new RouteData.ParsedRoute();
         result.sourceUrl = sourceUrl;
 
         // 1. 详情
@@ -94,7 +94,7 @@ public class TwoBuluClient {
 
     // ===== 解析 =====
 
-    private void parseDetail(JsonNode root, TwoBulu.ParsedRoute out) {
+    private void parseDetail(JsonNode root, RouteData.ParsedRoute out) {
         JsonNode d = root.path("data").path("details");
         if (d.isMissingNode() || d.isNull()) {
             throw new RuntimeException("两步路返回的详情格式异常");
@@ -132,7 +132,7 @@ public class TwoBuluClient {
         out.lngEnd = gcjEnd[1];
     }
 
-    private void parseTrack(String trackJson, TwoBulu.ParsedRoute out) {
+    private void parseTrack(String trackJson, RouteData.ParsedRoute out) {
         if (trackJson == null || trackJson.isBlank()) {
             return;
         }
@@ -151,7 +151,7 @@ public class TwoBuluClient {
                 if (pts.isArray()) {
                     for (int i = 0; i < pts.size(); i++) {
                         JsonNode p = pts.get(i);
-                        TwoBulu.TrackPoint tp = new TwoBulu.TrackPoint();
+                        RouteData.TrackPoint tp = new RouteData.TrackPoint();
                         double wlat = p.path("latitude").asDouble(0);
                         double wlng = p.path("longitude").asDouble(0);
                         double[] gcj = CoordTransform.wgs84ToGcj02(wlat, wlng);
@@ -170,7 +170,7 @@ public class TwoBuluClient {
             if (marks.isArray()) {
                 for (int i = 0; i < marks.size(); i++) {
                     JsonNode m = marks.get(i);
-                    TwoBulu.Marker mk = new TwoBulu.Marker();
+                    RouteData.Marker mk = new RouteData.Marker();
                     mk.name = m.has("name") && !m.get("name").isNull() ? m.get("name").asText() : null;
                     double wlat = m.path("latitude").asDouble(0);
                     double wlng = m.path("longitude").asDouble(0);
@@ -194,14 +194,15 @@ public class TwoBuluClient {
 
     private String extractRegion(String name, String cityId) {
         if (name != null && name.length() >= 2) {
-            String region = name.substring(0, Math.min(3, name.length()));
-            for (String suffix : new String[]{"户外", "线", "山", "古道", "村"}) {
-                int idx = region.indexOf(suffix);
-                if (idx > 0) {
-                    return region.substring(0, idx);
+            // 取名字前 8 字再按常见后缀截断："深圳户外毕业线三水线…" → "深圳"
+            String head = name.substring(0, Math.min(8, name.length()));
+            for (String suffix : new String[]{"户外", "徒步", "穿越", "线", "山", "古道", "村"}) {
+                int idx = head.indexOf(suffix);
+                if (idx >= 2) {
+                    return head.substring(0, idx);
                 }
             }
-            return region;
+            return head.substring(0, Math.min(3, head.length()));
         }
         return cityId.isEmpty() ? "" : cityId;
     }

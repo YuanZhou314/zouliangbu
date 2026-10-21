@@ -1,4 +1,5 @@
 # prod：MySQL 8。所有敏感项走环境变量，不落库不进 git。
+# 以后换 PostgreSQL：改 url/driver，并新增 db/migration/postgres 目录后把 locations 指过去。
 spring:
   datasource:
     url: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/zouliangbu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
@@ -8,6 +9,8 @@ spring:
     hikari:
       maximum-pool-size: 10
       minimum-idle: 2
+  flyway:
+    locations: classpath:db/migration/mysql,classpath:db/migration/common
 
 logging:
   level:

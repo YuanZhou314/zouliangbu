@@ -1,0 +1,14 @@
+# test：SQLite 共享内存库（同一个 JVM 内多连接共享，进程结束即销毁）。
+# 用内存库而不是文件库，保证每次 mvn test 都是从 Flyway 建表 + 种子数据开始的干净状态。
+spring:
+  datasource:
+    url: jdbc:sqlite:file:zlb-test?mode=memory&cache=shared
+    driver-class-name: org.sqlite.JDBC
+    username: ""
+    password: ""
+    hikari:
+      maximum-pool-size: 1
+      minimum-idle: 1
+      connection-init-sql: PRAGMA busy_timeout = 5000
+  flyway:
+    locations: classpath:db/migration/sqlite,classpath:db/migration/common

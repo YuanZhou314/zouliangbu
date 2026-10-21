@@ -6,10 +6,10 @@ spring:
   application:
     name: zouliangbu-server
   profiles:
-    active: dev          # 本地默认 dev（H2 内存库，零依赖启动）；生产用 --spring.profiles.active=prod
+    active: dev          # 本地默认 dev（SQLite 单文件库，零依赖启动）；生产用 --spring.profiles.active=prod
   flyway:
     enabled: true
-    locations: classpath:db/migration
+    # locations 按方言在 profile 里指定（dev/test → db/migration/sqlite，prod → db/migration/mysql）
     baseline-on-migrate: true
 
 mybatis-plus:
