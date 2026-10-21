@@ -8,16 +8,23 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * 管理员鉴权：固定 token，存 application.yml。
+ * 管理员鉴权：固定密码换 token，token 存内存。
  *
- * 使用方式：前端登录时 POST 密码 → 校验后签发 token（内存 Map，2h 过期），
+ * 使用方式：前端登录 POST 密码 → 校验后签发 token（内存 Map，2h 过期），
  * 后续请求在 Header 携带 token，此处校验。
  * 这是开源小项目够用的方案，不引入 Spring Security。
+ *
+ * 校验通过时把操作者写入 {@link com.zouliangbu.server.admin.AdminContext}，
+ * 供审计服务取"这次是谁改的"。当前只支持单账号，所以 operator 恒为 {@code admin}；
+ * 将来加多账号只改这里，审计表不用动。
  */
 @Component
 public class AdminAuthInterceptor implements HandlerInterceptor {
 
-    @Value("${admin.password:zouliangbu-admin}")
+    /** 单账号场景下的操作者标识。多账号时改成从 token 反查用户名。 */
+    private static final String OPERATOR = "admin";
+
+    @Value("${admin.password:admin}")
     private String adminPassword;
 
     @Value("${admin.token-ttl-hours:2}")
@@ -60,6 +67,17 @@ public class AdminAuthInterceptor implements HandlerInterceptor {
             resp.getWriter().write("{\"code\":401,\"msg\":\"未授权或 token 已过期\"}");
             return false;
         }
+        com.zouliangbu.server.admin.AdminContext.set(OPERATOR);
         return true;
+    }
+
+    /**
+     * 请求结束后必须清掉 ThreadLocal。
+     * Tomcat 线程是复用的，不清理会让下一个请求（哪怕是未登录的）读到上一个管理员身份，
+     * 审计就会记错人 —— 这是 ThreadLocal 用于请求上下文的经典泄漏点。
+     */
+    @Override
+    public void afterCompletion(HttpServletRequest req, HttpServletResponse resp, Object handler, Exception ex) {
+        com.zouliangbu.server.admin.AdminContext.clear();
     }
 }

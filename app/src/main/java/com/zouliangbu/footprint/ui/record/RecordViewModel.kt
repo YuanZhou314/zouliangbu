@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
@@ -49,6 +50,11 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
 
     /** 原始轨迹点（含低质量点，与 DB 一致），只用于去重判断。 */
     private val rawPoints = MutableStateFlow<List<TrackPoint>>(emptyList())
+
+    /** 短记录已丢弃提示（用户明确要求：太短的记录直接不计，不弹选择框）。 */
+    private val _shortDiscarded = MutableStateFlow(false)
+    val shortDiscarded: StateFlow<Boolean> = _shortDiscarded
+    fun consumeShortDiscarded() { _shortDiscarded.value = false }
 
     /** 喂给地图的折线。只做类型转换（TrackPoint → MapPoint），抽稀留到详情页（P2.5）。 */
     val track: StateFlow<List<MapPoint>> = rawPoints
@@ -103,6 +109,31 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     /** 用户看完「上次记录异常中断」提示后调用，避免下次进页面又弹。 */
     fun dismissRecovery() = SessionRecovery.consume()
 
+    /**
+     * 判断一条进行中的记录是否「太短」。
+     *
+     * 用户明确要求（2026-10-21）：没怎么动 / 时间太短的记录**直接不计入**，
+     * 只提醒、不给用户选择。阈值：有效时长 < 60 秒 或 距离 < 50 米。
+     */
+    fun isTooShort(snap: RecordingTrackState.Snapshot?): Boolean {
+        snap ?: return false
+        return snap.elapsedMs < MIN_DURATION_MS || snap.distanceMeters < MIN_DISTANCE_M
+    }
+
+    /**
+     * 丢弃一条短记录：等服务把状态清空（收尾落库完成）后，把会话连同轨迹点一起删掉。
+     * 不与 Service 的收尾赛跑——先让它正常收尾，再删，时序最稳。
+     */
+    fun discardShortRecord(sessionId: Long) {
+        viewModelScope.launch {
+            // 等 Service 停止并清掉状态（停止即代表收尾事务已完成）
+            RecordingTrackState.current.first { it == null || it.sessionId != sessionId }
+            kotlinx.coroutines.delay(300)
+            withContext(Dispatchers.IO) { repo.deleteSession(sessionId) }
+            _shortDiscarded.value = true
+        }
+    }
+
     /** 创建一条新会话（endTime = NULL），返回 sessionId 用于启动前台服务。 */
     fun startSession(onReady: (Long) -> Unit) {
         viewModelScope.launch {
@@ -133,6 +164,12 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     private companion object {
         /** 看门狗检查周期。 */
         const val WATCHDOG_INTERVAL_MS = 10_000L
+
+        /** 短记录阈值：有效时长下限。 */
+        const val MIN_DURATION_MS = 60_000L
+
+        /** 短记录阈值：距离下限（米）。 */
+        const val MIN_DISTANCE_M = 50f
 
         /**
          * 超过这个时间没有心跳才认定 Service 已死。

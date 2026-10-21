@@ -1,64 +1,83 @@
 package com.zouliangbu.footprint.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Terrain
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import com.zouliangbu.footprint.R
+import com.zouliangbu.footprint.data.remote.ContentApiFactory
 
 /**
- * 封面占位组件。
+ * 封面组件。
  *
- * coverUrl 为空时画渐变色块 + Terrain 图标水印 + 可选标签（城市/地区）；
- * 将来接入网络图片后，在 coverUrl != null 分支替换为图片组件即可，调用方不变。
+ * coverUrl 非空时用 Coil 加载网络图（加载中/失败回退 [R.drawable.ic_cover_placeholder]）；
+ * 为空时直接显示默认占位图（浅底 + 山形图案），可选标签（城市/地区）叠加。调用方零改动。
  */
-private val CoverPalettes = listOf(
-    listOf(Color(0xFF2E7D32), Color(0xFF81C784)), // 山林绿
-    listOf(Color(0xFF00695C), Color(0xFF4DB6AC)), // 竹海青
-    listOf(Color(0xFF1565C0), Color(0xFF64B5F6)), // 天空蓝
-    listOf(Color(0xFFE65100), Color(0xFFFFB74D)), // 落日橙
-    listOf(Color(0xFF4E342E), Color(0xFFA1887F))  // 岩石灰
-)
 
+/**
+ * 把服务端返回的 coverUrl 解析成可加载的绝对地址：
+ * - null → null（走默认占位图）
+ * - 已是 http(s) 绝对地址 → 原样
+ * - 以 / 开头的相对路径（如 /uploads/2026-10/x.jpg）→ 拼 [ContentApiFactory.BASE_URL]
+ */
+fun resolveCoverUrl(raw: String?): String? {
+    if (raw.isNullOrBlank()) return null
+    return if (raw.startsWith("http://") || raw.startsWith("https://")) {
+        raw
+    } else {
+        ContentApiFactory.BASE_URL.trimEnd('/') + (if (raw.startsWith("/")) raw else "/$raw")
+    }
+}
+
+// seed 参数保留以兼容现有调用点（占位图统一后不再区分色板）
+@Suppress("UNUSED_PARAMETER")
 @Composable
 fun CoverPlaceholder(
     seed: Int,
     aspectRatio: Float,
     label: String? = null,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    coverUrl: String? = null
 ) {
-    val colors = CoverPalettes[Math.floorMod(seed, CoverPalettes.size)]
     Box(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio.coerceIn(0.6f, 1.6f))
             .clip(RoundedCornerShape(12.dp))
-            .background(Brush.linearGradient(colors))
+            .background(Color(0xFFEAF1E7))
     ) {
-        Icon(
-            Icons.Filled.Terrain,
-            contentDescription = null,
-            tint = Color.White.copy(alpha = 0.22f),
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .offset(x = 10.dp, y = 10.dp)
-                .size(72.dp)
-        )
+        val url = resolveCoverUrl(coverUrl)
+        if (url != null) {
+            AsyncImage(
+                model = url,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                // 加载中/失败都露出默认占位图
+                error = painterResource(R.drawable.ic_cover_placeholder),
+                modifier = Modifier.matchParentSize()
+            )
+        } else {
+            Image(
+                painter = painterResource(R.drawable.ic_cover_placeholder),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.matchParentSize()
+            )
+        }
         if (!label.isNullOrBlank()) {
             Text(
                 label,

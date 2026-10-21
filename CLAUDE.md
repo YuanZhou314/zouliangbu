@@ -10,6 +10,22 @@
 写 README / CHANGELOG / ROADMAP 等文档要**短**：只留结论、命令、踩坑点。
 不写论证过程、不贴验收流水账、不重复代码里已有的信息。表格能一行说完就别拆三段。
 
+## Git 纪律（用户明确要求，2026-10-21）
+**不许自动提交。** 没有用户当轮明确说「提交 / commit / 推送」，改完代码就停在工作区，不 `git add` / `git commit` / `git push`。
+- 允许只读操作：`git status` / `git diff` / `git log`。
+- 用户说「提交」才提交，且提交前先 `git log --oneline -5` + `git status` 核对（本仓库有并行会话）。
+- 打包同理：不发话不 `assembleDebug`（见下方验证纪律）。
+
+## 部署纪律（2026-10-21）
+线上服务器 `82.156.84.127`，**裸 jar + systemd** 跑在 `/opt/zouliangbu-server`，profile=prod + MySQL。
+- 发布只有一条路：`cd zouliangbu-server && ./deploy/release.sh`（或 `.\deploy\release.ps1`）。
+  它做 打包→scp→切软链→restart→健康检查，失败自动回滚。
+- **脚本不碰 git。** 部署与提交是两件事，提交仍需用户明确指令。
+- **禁止改已发布的 Flyway 脚本**（V1–V4 线上已跑），改表只能新增 `V5__*.sql`。
+- 服务器结构：`releases/<时间戳-sha>/app.jar` + `current` 软链 + `zlb.env`(chmod 600) + 上传目录。
+  上传目录跨版本共享，发布不覆盖。
+- 细节见 `zouliangbu-server/deploy/README.md`。
+
 ## 验证纪律（用户明确要求，2026-10-20）
 **默认不测。** 用户自己会装包实测，助手不要把 token 烧在反复验证上。
 - 只有用户**明确说**「跑一下 / 验证 / 装模拟器」时才动手测，且**一轮测完就停**。

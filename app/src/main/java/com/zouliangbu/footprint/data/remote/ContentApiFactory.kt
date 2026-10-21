@@ -1,5 +1,6 @@
 package com.zouliangbu.footprint.data.remote
 
+import com.zouliangbu.footprint.data.model.FeedDetail
 import com.zouliangbu.footprint.data.model.FeedItem
 import com.zouliangbu.footprint.data.model.GearCategory
 import com.zouliangbu.footprint.data.model.RouteCatalog
@@ -36,10 +37,10 @@ object ContentApiFactory {
     /** 云服务器（2026-10-21 部署，四接口已 curl 验证）。上 HTTPS 后改成 https 域名即可。 */
     const val BASE_URL = "http://82.156.84.127:8080"
 
-    /** 单例 Retrofit。 */
-    val service: ContentService by lazy { build() }
+    /** 单例 Retrofit。auth 模块（AuthClient）复用同一个 baseUrl / client / converter。 */
+    val service: ContentService by lazy { retrofit.create(ContentService::class.java) }
 
-    private fun build(): ContentService {
+    val retrofit: Retrofit by lazy {
         val json = kotlinx.serialization.json.Json {
             ignoreUnknownKeys = true
             coerceInputValues = true
@@ -49,12 +50,11 @@ object ContentApiFactory {
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
-        return Retrofit.Builder()
+        Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(client)
             .addConverterFactory(converterFactory)
             .build()
-            .create(ContentService::class.java)
     }
 }
 
@@ -62,6 +62,9 @@ object ContentApiFactory {
 interface ContentService {
     @GET("api/v1/feed")
     suspend fun feed(): ApiResponse<FeedPage>
+
+    @GET("api/v1/feed/{id}")
+    suspend fun getFeedDetail(@retrofit2.http.Path("id") id: String): ApiResponse<FeedDetail>
 
     @GET("api/v1/routes")
     suspend fun routes(): ApiResponse<RouteCatalog>
@@ -147,7 +150,10 @@ data class RouteDetail(
     val ascentMeters: Int = 0,
     val durationName: String? = null,
     val trackPointCount: Int = 0,
-    val markerCount: Int = 0
+    val markerCount: Int = 0,
+    val coverUrl: String? = null,
+    val coverStyle: Int = 0,
+    val tags: List<String> = emptyList()
 )
 
 /** 轨迹点 DTO。 */
@@ -172,35 +178,36 @@ data class MarkerDto(
     val time: Long? = null
 )
 
-/** RemoteFeedRepository：网络失败回退 Mock，UI 无感。 */
+/**
+ * RemoteFeedRepository：只走线上（用户要求：假数据全部清空，没有就不展示）。
+ * 网络失败/为空 → 空列表，UI 显示空态；[fallback] 参数仅为兼容旧装配签名保留，不再使用。
+ */
 class RemoteFeedRepository(
-    private val fallback: FeedRepository
+    @Suppress("unused") private val fallback: FeedRepository
 ) : FeedRepository {
     override fun observeFeed(): Flow<List<FeedItem>> = flow {
-        val page = runCatching { ContentApiFactory.service.feed().data }
-            .getOrNull()
-        val items = page?.items ?: emptyList()
-        if (items.isNotEmpty()) {
-            emit(items)
+        val page = runCatching { ContentApiFactory.service.feed().data }.getOrNull()
+        if (page != null && page.items.isNotEmpty()) {
+            ContentSourceState.onNetworkSuccess()
         } else {
-            fallback.observeFeed().collect { emit(it) }
+            ContentSourceState.onOfflineFallback()
         }
+        emit(page?.items ?: emptyList())
     }.flowOn(Dispatchers.IO)
 }
 
-/** RemoteRouteRepository：同上。 */
+/** RemoteRouteRepository：同上，只走线上，失败给空目录。 */
 class RemoteRouteRepository(
-    private val fallback: RouteRepository
+    @Suppress("unused") private val fallback: RouteRepository
 ) : RouteRepository {
     override fun observeCatalog(): Flow<RouteCatalog> = flow {
-        val catalog = runCatching { ContentApiFactory.service.routes().data }
-            .getOrNull()
-        // 服务端直接返回 RouteCatalog{recommendations, sections}，字段与 App model 一致。
+        val catalog = runCatching { ContentApiFactory.service.routes().data }.getOrNull()
         if (catalog != null && catalog.recommendations.isNotEmpty()) {
-            emit(catalog)
+            ContentSourceState.onNetworkSuccess()
         } else {
-            fallback.observeCatalog().collect { emit(it) }
+            ContentSourceState.onOfflineFallback()
         }
+        emit(catalog ?: RouteCatalog(emptyList(), emptyList()))
     }.flowOn(Dispatchers.IO)
 }
 

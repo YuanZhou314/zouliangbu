@@ -12,3 +12,9 @@ data/
 *.db-journal
 *.db-wal
 *.db-shm
+
+# 后台图片上传目录（admin.upload.dir）：运行期数据，不入库
+uploads/
+
+# 部署本地配置（含服务器地址，不入库）
+deploy/deploy.env

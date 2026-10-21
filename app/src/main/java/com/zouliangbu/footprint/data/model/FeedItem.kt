@@ -1,11 +1,14 @@
 package com.zouliangbu.footprint.data.model
 
+import kotlinx.serialization.Serializable
+
 /**
- * 首页「同城动态」卡片。
+ * 首页「同城动态」帖子（列表卡片）。字段与 ContentDtos.FeedItem 一致。
  *
- * coverUrl 预留：将来接网络图片时由 Remote 实现填入；
- * 本期恒为 null，UI 用 coverStyle 映射渐变占位色块。
+ * coverStyle/coverUrl 预留：coverUrl 由 Remote 实现填入（相对路径，需拼 BASE_URL），
+ * UI 用 CoverPlaceholder(coverUrl=…) 展示，null 时回退渐变占位色块。
  */
+@Serializable
 data class FeedItem(
     val id: String,
     val title: String,

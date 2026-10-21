@@ -31,6 +31,27 @@ public final class ContentDtos {
     ) {
     }
 
+    /**
+     * 对应 App: FeedDetail（动态详情页）。
+     *
+     * 契约：id/title/author/likeCount/city/coverStyle 必须永远非 null（App 侧无默认值）；
+     * content 允许空串但不允许 null；coverAuthor 可为 null。
+     */
+    public record FeedDetail(
+            String id,
+            String title,
+            String author,
+            int likeCount,
+            String city,
+            int coverStyle,
+            String coverUrl,
+            float coverAspectRatio,
+            String coverAuthor,
+            String content,
+            String createdAt
+    ) {
+    }
+
     /** 对应 App: 一页动态 */
     public record FeedPage(List<FeedItem> items, String nextCursor) {
     }

@@ -19,14 +19,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * 没有它，改表时只能靠 `fallbackToDestructiveMigration` 清库——用户的轨迹会全丢。
  */
 @Database(
-    entities = [TrackSession::class, TrackPoint::class],
-    version = 4,
+    entities = [TrackSession::class, TrackPoint::class, GearItem::class],
+    version = 5,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun sessionDao(): TrackSessionDao
     abstract fun pointDao(): TrackPointDao
+    abstract fun gearItemDao(): GearItemDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -65,11 +66,37 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * v5：装备台账（ROADMAP 装备模块）。
+         *
+         * CREATE TABLE 的列顺序 / 类型 / NOT NULL / 默认值必须与 [GearItem] entity 逐列一致——
+         * Room 迁移后会跑 schema 校验，差一个字启动就抛 IllegalStateException。
+         * entity 没写 @ColumnInfo(defaultValue)，所以这里也不带 DEFAULT 子句
+         * （Kotlin 默认值是应用层的，不进 schema）。
+         */
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `gear_items` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`name` TEXT NOT NULL, " +
+                            "`brandModel` TEXT NOT NULL, " +
+                            "`categoryId` TEXT NOT NULL, " +
+                            "`status` INTEGER NOT NULL, " +
+                            "`weightGrams` INTEGER NOT NULL, " +
+                            "`priceCents` INTEGER, " +
+                            "`purchaseDate` TEXT, " +
+                            "`note` TEXT, " +
+                            "`createdAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        /**
          * 迁移清单。Room 会从当前库版本逐级跑，缺一条就在启动时抛
          * `IllegalStateException: Room cannot verify the data integrity`。
          */
         private val MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {

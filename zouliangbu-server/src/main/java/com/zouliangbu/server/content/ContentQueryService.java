@@ -2,6 +2,7 @@ package com.zouliangbu.server.content;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.zouliangbu.server.common.ApiResponse;
+import com.zouliangbu.server.content.dto.ContentDtos.FeedDetail;
 import com.zouliangbu.server.content.dto.ContentDtos.FeedItem;
 import com.zouliangbu.server.content.dto.ContentDtos.FeedPage;
 import com.zouliangbu.server.content.dto.ContentDtos.GearCategory;
@@ -77,6 +78,33 @@ public class ContentQueryService {
         return new FeedPage(items, next);
     }
 
+    /**
+     * 动态详情：不存在或未上线返回 null（Controller 转 404）。
+     * content 保证非 null（空串），其余必填字段与列表口径一致。
+     */
+    public FeedDetail feedDetail(long id) {
+        FeedPost p = feedPostMapper.selectById(id);
+        if (p == null || p.getStatus() == null || p.getStatus() != 1) {
+            return null;
+        }
+        float ratio = p.getCoverAspectRatio() == null ? 1f : p.getCoverAspectRatio().floatValue();
+        int coverStyle = p.getId() == null ? 0 : (int) (p.getId() % 5);
+        return new FeedDetail(
+                String.valueOf(p.getId()),
+                // title/author/city 与 likeCount 同样兜底：后台若绕过校验写进 null，
+                // App 侧无默认值字段会直接抛 MissingFieldException，整页白屏。
+                p.getTitle() == null ? "" : p.getTitle(),
+                p.getAuthor() == null ? "" : p.getAuthor(),
+                p.getLikeCount() == null ? 0 : p.getLikeCount(),
+                p.getCity() == null ? "" : p.getCity(),
+                coverStyle,
+                p.getCoverUrl(),
+                ratio,
+                p.getCoverAuthor(),
+                p.getContent() == null ? "" : p.getContent(),
+                p.getCreatedAt() == null ? null : p.getCreatedAt().toString());
+    }
+
     /** 线路目录：横向推荐位 + 分组；keyword 过滤名称/地区，命中后只保留非空分组。 */
     public RouteCatalog catalog(String keyword, String city) {
         String kw = keyword == null ? "" : keyword.trim();
@@ -134,6 +162,18 @@ public class ContentQueryService {
                     "",
                     loose.stream().map(this::toRouteItem).toList()));
         }
+
+        // 兜底分组「最新收录」：section_id=NULL 且非推荐位的已上线线路（审批导入 /
+        // 后台新建没勾推荐位的）原先完全不可见。固定 id="latest" 追加在末尾，
+        // 组为空也返回该 section（App 端处理空组），subtitle 空串兜底（App 契约非空）。
+        List<RouteItem> latestItems = loose.stream()
+                .filter(r -> !Boolean.TRUE.equals(r.getIsRecommend()))
+                .sorted(java.util.Comparator.comparing(RouteEntity::getId,
+                        java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
+                .limit(12)
+                .map(this::toRouteItem)
+                .toList();
+        sections.add(new RouteSection("latest", "最新收录", "", latestItems));
 
         // 搜索时就隐藏推荐位，避免"搜了关键词但顶部还是无关推荐"的割裂感
         List<RouteItem> recommendations = kw.isEmpty()

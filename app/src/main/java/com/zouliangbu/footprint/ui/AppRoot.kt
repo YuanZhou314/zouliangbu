@@ -7,6 +7,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.zouliangbu.footprint.ui.navigation.AppRoute
+import com.zouliangbu.footprint.ui.gear.GearEditScreen
+import com.zouliangbu.footprint.ui.gear.GearPackingScreen
+import com.zouliangbu.footprint.ui.gear.GearStatsScreen
 import com.zouliangbu.footprint.ui.record.RecordScreen
 import com.zouliangbu.footprint.ui.tabs.MainTabsScreen
 import com.zouliangbu.footprint.ui.tracks.TrackDetailScreen
@@ -40,7 +43,16 @@ fun AppRoot() {
                 onOpenRecord = {
                     rootNav.navigate(AppRoute.RECORD) { launchSingleTop = true }
                 },
-                onOpenTrackDetail = openTrackDetail
+                onOpenTrackDetail = openTrackDetail,
+                onOpenGearEdit = { gearId ->
+                    rootNav.navigate(AppRoute.gearEdit(gearId)) { launchSingleTop = true }
+                },
+                onOpenGearStats = {
+                    rootNav.navigate(AppRoute.GEAR_STATS) { launchSingleTop = true }
+                },
+                onOpenGearPacking = {
+                    rootNav.navigate(AppRoute.GEAR_PACKING) { launchSingleTop = true }
+                }
             )
         }
         composable(AppRoute.RECORD) {
@@ -57,6 +69,25 @@ fun AppRoot() {
         ) { entry ->
             val id = entry.arguments?.getLong(AppRoute.ARG_SESSION_ID) ?: 0L
             TrackDetailScreen(sessionId = id, onBack = { rootNav.popBackStack() })
+        }
+        // ===== 装备模块（外层全屏页）=====
+        composable(
+            route = AppRoute.GEAR_EDIT,
+            arguments = listOf(
+                navArgument(AppRoute.ARG_GEAR_ID) {
+                    type = NavType.LongType
+                    defaultValue = 0L // gear/edit 不带参数 = 新增
+                }
+            )
+        ) { entry ->
+            val gearId = entry.arguments?.getLong(AppRoute.ARG_GEAR_ID) ?: 0L
+            GearEditScreen(gearId = gearId, onBack = { rootNav.popBackStack() })
+        }
+        composable(AppRoute.GEAR_STATS) {
+            GearStatsScreen(onBack = { rootNav.popBackStack() })
+        }
+        composable(AppRoute.GEAR_PACKING) {
+            GearPackingScreen(onBack = { rootNav.popBackStack() })
         }
     }
 }

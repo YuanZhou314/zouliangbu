@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zouliangbu.footprint.FootprintApp
+import com.zouliangbu.footprint.data.db.TrackPoint
 import com.zouliangbu.footprint.data.db.TrackSummary
 import com.zouliangbu.footprint.export.GpxImport
 import com.zouliangbu.footprint.export.GpxParser
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -24,6 +26,9 @@ sealed interface ImportOutcome {
     /** 失败一定是"可展示给用户的原因"（解析错 / 空文件 / 读不到），不要塞堆栈。 */
     data class Failure(val reason: String) : ImportOutcome
 }
+
+/** 顶部聚合统计（由列表数据在内存里聚合，不再额外查库）。 */
+data class RecordsStats(val count: Int, val totalMs: Long, val totalMeters: Float)
 
 /**
  * 历史轨迹列表 ViewModel。
@@ -37,6 +42,42 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
 
     val tracks: StateFlow<List<TrackSummary>> = repo.observeCompleted()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val stats: StateFlow<RecordsStats> = tracks
+        .map { list ->
+            RecordsStats(
+                count = list.size,
+                totalMs = list.sumOf { it.activeDurationMs },
+                totalMeters = list.sumOf { it.totalDistanceMeters.toDouble() }.toFloat()
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecordsStats(0, 0, 0f))
+
+    // ===== 轨迹缩略图 =====
+
+    // 列表卡片里的小图。缓存避免滚动时反复查库；LRU 意义不大（会话数远小于内存压力），
+    // 删会话时按 id 失效即可。
+    private val pointsCache = java.util.concurrent.ConcurrentHashMap<Long, List<TrackPoint>>()
+
+    /**
+     * 取缩略图用的轨迹点：全部点里等距抽 ≤200 个，画折线足够，几千点全画纯属浪费。
+     * 线程安全：同一 sessionId 并发请求会重复查一次库，代价可忽略，不加锁。
+     */
+    suspend fun thumbnailPoints(sessionId: Long): List<TrackPoint> =
+        pointsCache[sessionId] ?: run {
+            val all = repo.getPointsForSession(sessionId)
+            val sampled = if (all.size <= 200) all else {
+                val step = all.size.toDouble() / 200
+                List(200) { all[(it * step).toInt()] }
+            }
+            pointsCache[sessionId] = sampled
+            sampled
+        }
+
+    fun delete(sessionId: Long) {
+        pointsCache.remove(sessionId)
+        viewModelScope.launch { repo.deleteSession(sessionId) }
+    }
 
     private val _importing = MutableStateFlow(false)
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
@@ -86,9 +127,5 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
         } catch (e: Exception) {
             ImportOutcome.Failure("写入数据库失败：${e.message ?: e.javaClass.simpleName}")
         }
-    }
-
-    fun delete(sessionId: Long) {
-        viewModelScope.launch { repo.deleteSession(sessionId) }
     }
 }

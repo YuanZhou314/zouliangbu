@@ -32,6 +32,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,9 +60,14 @@ import java.util.Locale
 fun ProfileScreen(
     onOpenTracks: () -> Unit,
     onOpenOffline: () -> Unit = {},
+    onOpenLogin: () -> Unit = {},
     vm: ProfileViewModel = viewModel()
 ) {
     val stats by vm.stats.collectAsStateWithLifecycle()
+    // 登录态来自 AuthSession（进程启动时从 SharedPreferences 恢复），UI 只读不写。
+    val user by com.zouliangbu.footprint.data.remote.AuthSession.user.collectAsStateWithLifecycle()
+    var showLogout by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     Column(
         modifier = Modifier
@@ -67,9 +75,12 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        // ===== 用户信息头（占位） =====
+        // ===== 用户信息头：未登录点进登录页；已登录显示用户名 + 退出 =====
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 4.dp, vertical = 12.dp)
+                .clickable(enabled = user == null, onClick = onOpenLogin),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -88,11 +99,23 @@ fun ProfileScreen(
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text("徒步者", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    "登录 / 账号功能开发中",
+                    user?.username ?: "徒步者",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    if (user != null) "已登录" else "点击登录 / 注册",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (user != null) {
+                Text(
+                    "退出",
+                    fontSize = 13.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clickable(onClick = { showLogout = true })
                 )
             }
         }
@@ -159,6 +182,49 @@ fun ProfileScreen(
 
         Spacer(Modifier.height(12.dp))
 
+        // ===== 外观（task-003：自动/手动浅深色切换） =====
+        val themeMode by com.zouliangbu.footprint.ui.theme.ThemePrefs.mode
+        Card(
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        androidx.compose.material.icons.Icons.Filled.Interests,
+                        contentDescription = null,
+                        tint = ForestGreen,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text("外观", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                    com.zouliangbu.footprint.ui.theme.ThemeMode.entries.forEach { m ->
+                        val selected = themeMode == m
+                        Text(
+                            m.label,
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(
+                                    if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.surfaceVariant
+                                )
+                                .clickable { com.zouliangbu.footprint.ui.theme.ThemePrefs.set(context, m) }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
         // ===== 户外足迹（入口占位） =====
         Card(
             shape = RoundedCornerShape(14.dp),
@@ -190,6 +256,25 @@ fun ProfileScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+    }
+
+    if (showLogout) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showLogout = false },
+            title = { Text("退出登录？") },
+            text = { Text("退出后本地记录仍在，但换设备需要重新登录才能同步身份。") },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    com.zouliangbu.footprint.data.remote.AuthSession.clear(context)
+                    showLogout = false
+                }) { Text("退出", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showLogout = false }) {
+                    Text("取消")
+                }
+            }
         )
     }
 }

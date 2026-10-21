@@ -13,7 +13,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.zouliangbu.footprint.data.RecordingTrackState
+import com.zouliangbu.footprint.ui.auth.LoginScreen
 import com.zouliangbu.footprint.ui.components.AppBottomBar
+import com.zouliangbu.footprint.ui.feed.FeedDetailScreen
 import com.zouliangbu.footprint.ui.gear.GearScreen
 import com.zouliangbu.footprint.ui.home.HomeScreen
 import com.zouliangbu.footprint.ui.navigation.AppRoute
@@ -23,6 +25,7 @@ import com.zouliangbu.footprint.ui.routes.RouteDetailScreen
 import com.zouliangbu.footprint.ui.profile.ProfileScreen
 import com.zouliangbu.footprint.ui.record.RecordScreen
 import com.zouliangbu.footprint.ui.routes.RoutesScreen
+import com.zouliangbu.footprint.ui.routes.TrackPreviewScreen
 import com.zouliangbu.footprint.ui.tracks.TrackListScreen
 import kotlinx.coroutines.flow.map
 
@@ -36,7 +39,10 @@ import kotlinx.coroutines.flow.map
 fun MainTabsScreen(
     tabNav: NavHostController,
     onOpenRecord: () -> Unit,
-    onOpenTrackDetail: (Long) -> Unit
+    onOpenTrackDetail: (Long) -> Unit,
+    onOpenGearEdit: (Long) -> Unit = {},
+    onOpenGearStats: () -> Unit = {},
+    onOpenGearPacking: () -> Unit = {}
 ) {
     // 只关心"是否在记录"：RecordingTrackState 每 2 秒发一次 Snapshot，
     // 必须 map + distinctUntilChanged，否则整个主框架（含当前 tab 页）跟着每 2 秒重组。
@@ -63,14 +69,30 @@ fun MainTabsScreen(
             startDestination = AppRoute.HOME,
             modifier = Modifier.padding(inner)
         ) {
-            composable(AppRoute.HOME) { HomeScreen() }
+            composable(AppRoute.HOME) {
+                HomeScreen(onOpenDetail = { feedId -> tabNav.navigate("feed/$feedId") })
+            }
             composable(AppRoute.ROUTES) { RoutesScreen(onOpenDetail = { tabNav.navigate("route/$it") }) }
-            composable(AppRoute.GEAR) { GearScreen() }
+            composable(AppRoute.GEAR) {
+                GearScreen(
+                    onOpenStats = onOpenGearStats,
+                    onOpenPacking = onOpenGearPacking,
+                    onOpenEdit = onOpenGearEdit
+                )
+            }
             composable(AppRoute.PROFILE) {
                 // 「我的记录」是下钻页，不进 tab 栈：navigate 入栈，返回回到「我的」。
                 ProfileScreen(
                     onOpenTracks = { tabNav.navigate(AppRoute.TRACKS) },
-                    onOpenOffline = { tabNav.navigate(AppRoute.OFFLINE) }
+                    onOpenOffline = { tabNav.navigate(AppRoute.OFFLINE) },
+                    onOpenLogin = { tabNav.navigate(AppRoute.LOGIN) }
+                )
+            }
+            // 登录 / 注册（2026-10-21）：内层 destination，保留底栏，登录成功即返回。
+            composable(AppRoute.LOGIN) {
+                LoginScreen(
+                    onBack = { tabNav.popBackStack() },
+                    onLoggedIn = { tabNav.popBackStack() }
                 )
             }
             composable(AppRoute.TRACKS) {
@@ -83,10 +105,24 @@ fun MainTabsScreen(
             composable(AppRoute.OFFLINE) {
                 OfflineMapScreen(onBack = { tabNav.popBackStack() })
             }
-            // 线路详情（ROADMAP P6 S5）
+            // 线路详情（ROADMAP P6 S5）：点地图进轨迹预览
             composable("route/{routeId}") { entry ->
                 val id = entry.arguments?.getString("routeId")?.toLongOrNull() ?: 0L
-                RouteDetailScreen(routeId = id, onBack = { tabNav.popBackStack() })
+                RouteDetailScreen(
+                    routeId = id,
+                    onBack = { tabNav.popBackStack() },
+                    onOpenTrackPreview = { tabNav.navigate("routeTrack/$id") }
+                )
+            }
+            // 轨迹预览（task-003）：全屏大图轨迹
+            composable("routeTrack/{routeId}") { entry ->
+                val id = entry.arguments?.getString("routeId")?.toLongOrNull() ?: 0L
+                TrackPreviewScreen(routeId = id, onBack = { tabNav.popBackStack() })
+            }
+            // 动态详情（问题 5）：feedId 是 String，不能 toLong
+            composable(AppRoute.FEED_DETAIL) { entry ->
+                val id = entry.arguments?.getString(AppRoute.ARG_FEED_ID) ?: ""
+                FeedDetailScreen(feedId = id, onBack = { tabNav.popBackStack() })
             }
         }
     }

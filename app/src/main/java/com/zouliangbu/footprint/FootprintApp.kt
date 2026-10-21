@@ -7,14 +7,13 @@ import com.amap.api.maps.MapsInitializer
 import com.zouliangbu.footprint.data.SessionRecovery
 import com.zouliangbu.footprint.data.db.AppDatabase
 import com.zouliangbu.footprint.data.mock.MockFeedRepository
-import com.zouliangbu.footprint.data.mock.MockGearRepository
 import com.zouliangbu.footprint.data.mock.MockRouteRepository
 import com.zouliangbu.footprint.data.repo.FeedRepository
 import com.zouliangbu.footprint.data.repo.GearRepository
+import com.zouliangbu.footprint.data.repo.LocalGearRepository
 import com.zouliangbu.footprint.data.repo.RouteRepository
 import com.zouliangbu.footprint.data.repo.TrackRepository
 import com.zouliangbu.footprint.data.remote.RemoteFeedRepository
-import com.zouliangbu.footprint.data.remote.RemoteGearRepository
 import com.zouliangbu.footprint.data.remote.RemoteRouteRepository
 import com.zouliangbu.footprint.location.CityProvider
 import com.zouliangbu.footprint.location.LocationProvider
@@ -43,10 +42,17 @@ class FootprintApp : Application() {
     // 服务端不可达时 UI 依然能拿到本地数据，不白屏。
     val feedRepository: FeedRepository by lazy { RemoteFeedRepository(MockFeedRepository()) }
     val routeRepository: RouteRepository by lazy { RemoteRouteRepository(MockRouteRepository()) }
-    val gearRepository: GearRepository by lazy { RemoteGearRepository(MockGearRepository()) }
+    // 装备台账走本地 Room 实现（纯本地，服务端不参与）；分类仍来自静态 MockData。
+    val gearRepository: GearRepository by lazy {
+        LocalGearRepository(database.gearItemDao())
+    }
 
     override fun onCreate() {
         super.onCreate()
+        // 恢复本地登录会话（token/uid/用户名，SharedPreferences）
+        com.zouliangbu.footprint.data.remote.AuthSession.restore(this)
+        // 恢复主题偏好（task-003：手动/自动浅深色切换）
+        com.zouliangbu.footprint.ui.theme.ThemePrefs.load(this)
         // ====== 隐私合规（必调，否则 AMapLocationClient 构造直接抛异常崩溃）======
         // 自 2023 年起，国内合规要求 SDK 调用方必须先告知并获得用户对隐私政策的同意。
         // 注意：高德 SDK 的隐私状态在两个类上**分别**保存——只调一个不够：

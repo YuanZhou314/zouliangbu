@@ -1,32 +1,23 @@
 [Unit]
 Description=zouliangbu content API (Spring Boot)
-# 有 MySQL 再用 prod profile；没有就用 dev（SQLite 单文件库 + Flyway 种子，数据落盘不丢）
-# 走 dev 时把下面 SPRING_PROFILES_ACTIVE 改 dev，并用 SQLITE_PATH 指定库文件（默认当前目录 zlb-dev.db）
-After=network-online.target mysqld.service
+After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=zlb
-Group=zlb
+# 用 ubuntu：服务器上该用户已存在，且 /usr/bin/java 现成可用，无需另装 JDK
+User=ubuntu
+Group=ubuntu
 WorkingDirectory=/opt/zouliangbu-server
 
-# JDK 17 路径按机器实际调整（arm64 / x86 均可，jar 内无原生库）
-Environment=JAVA_HOME=/usr/lib/jvm/temurin-17-jre
 Environment=TZ=Asia/Shanghai
+# 数据库密码、profile、后台密码放这个文件（chmod 600），不要写进 unit
+EnvironmentFile=/opt/zouliangbu-server/zlb.env
 
-# 走 dev profile 时改这一行：SPRING_PROFILES_ACTIVE=dev
-Environment=SPRING_PROFILES_ACTIVE=prod
-Environment=DATABASE_URL=jdbc:mysql://127.0.0.1:3306/zouliangbu?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-Environment=DATABASE_USER=zlb
-# 密码放这里会被 systemctl show 看到；更稳妥是 EnvironmentFile=/etc/zlb/db.env (chmod 600)
-Environment=DATABASE_PASSWORD=CHANGE_ME
-
-# 显式 --server.port，避免环境里残留 SERVER__PORT 之类变量改变端口
-ExecStart=/usr/lib/jvm/temurin-17-jre/bin/java \
+ExecStart=/usr/bin/java \
     -XX:MaxRAMPercentage=75 -XX:+ExitOnOutOfMemoryError \
     -Duser.timezone=Asia/Shanghai -Dfile.encoding=UTF-8 \
-    -jar /opt/zouliangbu-server/zouliangbu-server-0.1.0.jar --server.port=8080
+    -jar /opt/zouliangbu-server/current/app.jar --server.port=8080
 
 # 优雅停机：先 SIGTERM，Spring 会关闭线程池和连接池
 KillSignal=SIGTERM
@@ -34,9 +25,6 @@ TimeoutStopSec=30
 
 Restart=on-failure
 RestartSec=5
-
-# 2G 内存小机器建议再收紧堆上限（MaxRAMPercentage 已按容器/机器内存算）
-# LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target

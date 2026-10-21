@@ -52,17 +52,20 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.model.FeedItem
 import com.zouliangbu.footprint.ui.components.CoverPlaceholder
+import com.zouliangbu.footprint.ui.components.OfflineDemoBanner
 import com.zouliangbu.footprint.ui.theme.ForestGreen
 import com.zouliangbu.footprint.ui.theme.TrailOrange
 
 /**
  * 首页：顶部城市栏（同城）+ 运营 Banner 占位 + 「同城动态」两列瀑布流。
  *
- * 本期动态卡片不可进详情；数据为 mock（FeedRepository 接口后面，
- * 接后台时只换 FootprintApp.feedRepository 的实现）。
+ * 动态卡片可点进 FeedDetailScreen（feed/{id}）。
  */
 @Composable
-fun HomeScreen(vm: HomeViewModel = viewModel()) {
+fun HomeScreen(
+    onOpenDetail: (String) -> Unit = {},
+    vm: HomeViewModel = viewModel()
+) {
     val feed by vm.feed.collectAsStateWithLifecycle()
     val city by vm.city.collectAsStateWithLifecycle()
 
@@ -95,6 +98,10 @@ fun HomeScreen(vm: HomeViewModel = viewModel()) {
                 )
             }
         }
+        // 离线演示数据横幅（问题 2）：回退 Mock 时提示
+        item(span = StaggeredGridItemSpan.FullLine) {
+            OfflineDemoBanner()
+        }
         item(span = StaggeredGridItemSpan.FullLine) {
             HomeBanner()
         }
@@ -107,11 +114,22 @@ fun HomeScreen(vm: HomeViewModel = viewModel()) {
             )
         }
 
+        if (feed.isEmpty()) {
+            item(span = StaggeredGridItemSpan.FullLine) {
+                Text(
+                    "暂无动态",
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
+        }
         items(feed, key = { it.id }) { item ->
-            FeedCard(item)
+            FeedCard(item, onOpenDetail = { onOpenDetail(item.id) })
         }
 
-        item(span = StaggeredGridItemSpan.FullLine) {
+        if (feed.isNotEmpty()) item(span = StaggeredGridItemSpan.FullLine) {
             Text(
                 "— 更多内容，敬请期待 —",
                 fontSize = 12.sp,
@@ -221,18 +239,19 @@ private fun HomeBanner() {
 }
 
 @Composable
-private fun FeedCard(item: FeedItem) {
+private fun FeedCard(item: FeedItem, onOpenDetail: () -> Unit = {}) {
     Card(
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.clickable(enabled = false) { /* 详情页暂未实现 */ }
+        modifier = Modifier.clickable(onClick = onOpenDetail)
     ) {
         Column {
             CoverPlaceholder(
                 seed = item.coverStyle,
                 aspectRatio = item.coverAspectRatio,
-                label = item.city
+                label = item.city,
+                coverUrl = item.coverUrl
             )
             Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
                 Text(

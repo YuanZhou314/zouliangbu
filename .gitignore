@@ -14,3 +14,8 @@ captures/
 *.keystore
 !zlb-debug.keystore
 keystore.properties
+# CodeCrew 智能体协作产物（本地产物，不入库）
+.agent-runs/
+
+# 本地临时文件
+tmp

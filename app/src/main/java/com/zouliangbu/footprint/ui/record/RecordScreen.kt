@@ -278,8 +278,15 @@ fun RecordScreen(
                     Button(
                         onClick = {
                             val sid = snapshot?.sessionId
+                            val tooShort = vm.isTooShort(snapshot)
                             context.startService(RecordingTrackService.stopIntent(context))
-                            summaryFor = sid
+                            if (tooShort && sid != null) {
+                                // 用户要求：太短的记录直接不计入，只提醒、不给选择
+                                summaryFor = null
+                                vm.discardShortRecord(sid)
+                            } else {
+                                summaryFor = sid
+                            }
                         },
                         modifier = Modifier.weight(1f).height(56.dp),
                         shape = RoundedCornerShape(28.dp),
@@ -332,9 +339,21 @@ fun RecordScreen(
         )
     }
 
+    // 短记录提示：太短的记录已自动丢弃，不给用户选择（用户明确要求）
+    val shortDiscarded by vm.shortDiscarded.collectAsStateWithLifecycle()
+    if (shortDiscarded) {
+        AlertDialog(
+            onDismissRequest = { vm.consumeShortDiscarded() },
+            title = { Text("记录太短") },
+            text = { Text("本次记录时长或距离太短，未保存。下次出去徒步再试试吧！") },
+            confirmButton = {
+                TextButton(onClick = { vm.consumeShortDiscarded() }) { Text("知道了") }
+            }
+        )
+    }
+
     // 摘要对话框：service 结束后从 sessions 里拿最终数据
-    summaryFor?.let { sid ->
-        val session: TrackSession? = remember(sid, sessions) {
+    summaryFor?.let { sid ->        val session: TrackSession? = remember(sid, sessions) {
             sessions.firstOrNull { it.id == sid }
         }
         if (session != null) {

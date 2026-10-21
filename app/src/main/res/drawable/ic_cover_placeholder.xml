@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 统一默认封面占位：浅底 + 山形图案（问题 1）。铺满显示时与 ContentScale.Crop 配合。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="400dp"
+    android:height="280dp"
+    android:viewportWidth="200"
+    android:viewportHeight="140">
+
+    <!-- 浅色天空底 -->
+    <path
+        android:fillColor="#EAF1E7"
+        android:pathData="M0,0h200v140h-200z" />
+
+    <!-- 太阳 -->
+    <path
+        android:fillColor="#F6CE8B"
+        android:pathData="M146,38a12,12 0 1,0 24,0a12,12 0 1,0 -24,0z" />
+
+    <!-- 远山 -->
+    <path
+        android:fillColor="#9DBB9A"
+        android:pathData="M0,140 L48,64 L84,112 L112,76 L146,116 L200,72 L200,140 Z" />
+
+    <!-- 近山 -->
+    <path
+        android:fillColor="#5F8A5F"
+        android:pathData="M0,140 L36,92 L70,140 Z" />
+    <path
+        android:fillColor="#527A52"
+        android:pathData="M108,140 L148,88 L200,140 Z" />
+</vector>

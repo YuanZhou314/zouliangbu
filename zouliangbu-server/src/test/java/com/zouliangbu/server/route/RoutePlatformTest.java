@@ -24,7 +24,7 @@ class RoutePlatformTest {
     void loginSuccess() throws Exception {
         mvc.perform(post("/api/v1/admin/login")
                         .contentType("application/json")
-                        .content("{\"password\":\"zouliangbu-admin\"}"))
+                        .content("{\"password\":\"admin\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data").isNotEmpty());
@@ -36,7 +36,7 @@ class RoutePlatformTest {
         mvc.perform(post("/api/v1/admin/login")
                         .contentType("application/json")
                         .content("{\"password\":\"wrong\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
     }
 
@@ -53,7 +53,7 @@ class RoutePlatformTest {
         // 先登录拿 token
         String token = mvc.perform(post("/api/v1/admin/login")
                         .contentType("application/json")
-                        .content("{\"password\":\"zouliangbu-admin\"}"))
+                        .content("{\"password\":\"admin\"}"))
                 .andReturn().getResponse().getContentAsString()
                 .replaceAll(".*\\\"data\\\":\\\"([^\\\"]+)\\\".*", "$1");
 
@@ -81,7 +81,7 @@ class RoutePlatformTest {
         mvc.perform(post("/api/v1/routes/submit")
                         .contentType("application/json")
                         .content("{\"sourceUrl\":\"\",\"submitterUuid\":\"u1\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
     }
 
@@ -91,7 +91,7 @@ class RoutePlatformTest {
         mvc.perform(post("/api/v1/routes/submit")
                         .contentType("application/json")
                         .content("{\"sourceUrl\":\"https://example.com/\",\"submitterUuid\":\"u1\"}"))
-                .andExpect(status().isOk())
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(1001));
     }
 
@@ -99,7 +99,7 @@ class RoutePlatformTest {
     @DisplayName("查询不存在的提交返回 1004")
     void getMissingSubmission() throws Exception {
         mvc.perform(get("/api/v1/routes/submissions/99999"))
-                .andExpect(status().isOk())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(1004));
     }
 }

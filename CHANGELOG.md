@@ -9,7 +9,41 @@
 
 ---
 
+## [2026-10-21] 管理后台扩展：从「只有路线审核」到 7 模块骨架
+
+- **新包 `com.zouliangbu.server.admin`**：`AdminSupport`（ok/badRequest/notFound/parseId/trimToNull）、
+  `AuditService`、`AdminContext`（ThreadLocal 操作者）、`PageResult`（页码分页统一形状）。
+  **没做泛型 CRUD 基类**：7 个模块的筛选参数与 DTO 各不相同，基类要么加一堆钩子要么被逐个覆盖，抽象反而更难读。
+- **模块**：看板 / 首页动态（完整样板）/ 装备分类 / 线路分组 / 配置中心 / 操作审计 / 图片上传。
+  前端 `layout.js` 左菜单外壳 + `app.css`，7 个页面全部落地，不是占位。
+- **V4 迁移**（sqlite+mysql）：`feed_post` 加 `content`/`cover_author`；新增 `app_config`、`admin_audit`。
+- **公开新接口** `GET /api/v1/config/app`（强更 / 公告）。硬规则：这个接口会被老版本 App 调用，
+  **不能删字段、不能改语义**；未配全的开关一律返回安全默认值（强更开但无下载地址 → 当作关闭，
+  否则用户点弹窗没反应）。
+- **修 `ApiResponse.fail` 恒返回 HTTP 200**（10 处）→ 新增 `failResponse(code,msg)` + `httpStatusOf(code)`。
+  新测试立刻暴露：`detailOfMissingSubmissionIs404` 报 `expected 404 but was 200`。
+  同时 4 条旧测试曾断言"错误也返回 200"（固化了 bug），已改为 `isBadRequest()/isNotFound()`。
+- **修 `PUT`/`DELETE /admin/routes/{id}` 空实现**：原来返回 ok 但不落库，点保存提示成功却毫无变化。
+- **`GET /admin/submissions/{id}/detail`**：任意状态（PENDING/APPROVED/REJECTED）都能打开，
+  根因是编辑页读的是公开接口 `/api/v1/routes/{id}`，它依赖 `route_detail`（审批通过才写入）。
+- **直接新建线路** `POST /admin/routes` + `GET /admin/routes/{id}/detail`：
+  运营不再被"必须先有用户提交才能建线"卡住。
+- **密码** `zouliangbu-admin` → **`admin`**（yml 与 `@Value` 兜底两处同步）。
+- **踩坑**：
+  - `@MapperScan` 必须加 `admin.mapper`，否则启动即 `NoSuchBeanDefinitionException`（新包默认不扫）。
+  - Spring Boot 4 测试注解包名变了：`org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc`；
+    Jackson 也迁到 `tools.jackson`（`com.fasterxml` 不存在）。
+  - MyBatis-Plus `last(String)` **不接受占位符参数**，分页要用 `Page` 对象，别手拼 LIMIT/OFFSET。
+  - `LambdaQueryWrapper` 不能用 `BaseMapper<?>` + `wrapper<?>` 传参，泛型对不上，工具方法要写 `<T>`。
+  - application.yml 里**重复的 `spring:` 键**会让 SnakeYAML 直接拒启（duplicate key）。
+  - 写库的测试类必须加 `@Transactional`，否则污染共享内存库，把"种子数据恰好 N 条"的断言全部搞挂。
+  - 本机全局代理会拦 `127.0.0.1`（curl 报 502 / `--noproxy *` 被 shell 展开），验证脚本要显式禁用代理。
+- `mvn test` → **54/54 绿**（新增 `AdminModulesTest` 14 例）；端到端 38 项全通（含上传安全、静态映射）。
+
+---
+
 ## [2026-10-21] 双平台路线导入 + 数据库 H2 → SQLite
+
 
 - **六只脚接入**：`SixFoot`（`/trip/{id}/` 页面正则 + `/v4/api/trip/{id}/trackjson`）+ `SixFootClient`；
   `RoutePlatform.detect` 按域名路由（`2bulu.com` / `foooooot.com`），未知域名提交即 1001。

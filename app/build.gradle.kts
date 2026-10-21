@@ -15,6 +15,10 @@ val buildNumber = versionProps.getProperty("buildNumber", "0").toInt() + 1
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // kotlinx-serialization 编译插件：没有它 @Serializable 只是空注解，运行期抛
+    // "Serializer not found"，Remote*Repository 静默回退 Mock（P1 修复的关键）。
+    // 版本必须与 Kotlin 1.9.24 严格一致。
+    id("org.jetbrains.kotlin.plugin.serialization") version "1.9.24"
     id("com.google.devtools.ksp")
 }
 
@@ -155,6 +159,9 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+
+    // Coil 2.x：封面网络图加载（coverUrl 打通，P1）。不要用 coil3——API 不同。
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

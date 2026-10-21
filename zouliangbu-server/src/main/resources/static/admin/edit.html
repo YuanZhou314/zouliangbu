@@ -3,230 +3,300 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>走两步 · 编辑路线</title>
+<title>编辑线路 · 走两步管理后台</title>
+<link rel="stylesheet" href="app.css">
 <style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5;color:#333}
-.topbar{background:#1B5E20;color:#fff;padding:12px 24px;display:flex;align-items:center;gap:16px}
-.topbar h1{font-size:18px;flex:1}
-.topbar a{color:#fff;text-decoration:none;font-size:13px;padding:6px 16px;border-radius:6px;background:rgba(255,255,255,0.15)}
-.topbar a:hover{background:rgba(255,255,255,0.25)}
-.form{max-width:800px;margin:24px auto;padding:0 24px}
-.group{background:#fff;border-radius:12px;padding:24px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06)}
-.group h2{font-size:15px;margin-bottom:16px;color:#555}
-label{display:block;font-size:12px;color:#888;margin-bottom:4px;margin-top:12px}
-input,textarea,select{padding:10px 14px;border:1px solid #ddd;border-radius:8px;font-size:14px;outline:none;width:100%}
-input:focus,textarea:focus,select:focus{border-color:#1B5E20}
-textarea{resize:vertical;min-height:100px}
-.row-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
-.actions{display:flex;gap:12px;justify-content:flex-end;margin:20px 0}
-.btn{padding:12px 24px;border:none;border-radius:8px;font-size:14px;cursor:pointer}
-.btn-save{background:#2e7d32;color:#fff}
-.btn-save:hover{background:#1b5e20}
-.btn-cancel{background:#757575;color:#fff}
-.info{font-size:12px;color:#999;background:#f9f9f9;padding:12px;border-radius:8px;margin-top:12px}
-.track-info{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-top:12px}
-.track-info .item{text-align:center;padding:10px;background:#f5f5f5;border-radius:8px}
-.track-info .item .val{font-size:18px;font-weight:600;color:#1B5E20}
-.track-info .item .label{font-size:11px;color:#888;margin-top:4px}
+.form-grid{display:grid;gap:14px}
+.row-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.row-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.banner{padding:12px 16px;border-radius:8px;font-size:13px;margin-bottom:14px;line-height:1.6}
+.track-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.track-stats .item{text-align:center;padding:12px;background:#f7f9f7;border-radius:8px}
+.track-stats .val{font-size:19px;font-weight:600;color:#1B5E20}
+.track-stats .label{font-size:11px;color:#87938a;margin-top:3px}
+.back{margin-bottom:14px;display:inline-block;font-size:13px;color:#5a7a5f}
 </style>
 </head>
 <body>
-<div class="topbar">
-  <h1 id="pageTitle">编辑路线</h1>
-  <a href="index.html">← 返回</a>
-</div>
-
-<div class="form">
-  <div class="group">
-    <h2>一键解析</h2>
-    <div style="display:flex;gap:12px;align-items:flex-end">
-      <div style="flex:1">
-        <label>两步路链接</label>
-        <input type="text" id="parseUrl" placeholder="https://www.2bulu.com/mc/route/detail?id=...">
-      </div>
-      <button class="btn btn-save" onclick="parseRoute()" style="white-space:nowrap;height:42px">解析填充</button>
-    </div>
-    <div class="info" id="parseStatus" style="margin-top:8px;display:none"></div>
-  </div>
-  <div class="group">
-    <h2>基本信息</h2>
-    <label>路线名称</label>
-    <input type="text" id="name" placeholder="路线名称">
-    <div class="row-2">
-      <div>
-        <label>地区</label>
-        <input type="text" id="region" placeholder="地区">
-      </div>
-      <div>
-        <label>距离 (km)</label>
-        <input type="number" id="distanceKm" step="0.1" placeholder="0.0">
-      </div>
-    </div>
-    <div class="row-2">
-      <div>
-        <label>爬升 (m)</label>
-        <input type="number" id="ascentMeters" placeholder="0">
-      </div>
-      <div>
-        <label>标签（逗号分隔）</label>
-        <input type="text" id="tags" placeholder="登山,露营">
-      </div>
-    </div>
-    <div class="row-2">
-      <div>
-        <label>封面图 URL（可选）</label>
-        <input type="text" id="coverUrl" placeholder="https://...">
-      </div>
-      <div>
-        <label>推荐到首页</label>
-        <select id="isRecommend">
-          <option value="false">否</option>
-          <option value="true">是</option>
-        </select>
-      </div>
-    </div>
-    <label>来源 URL</label>
-    <input type="text" id="sourceUrl" placeholder="来源链接">
-    <div class="info" id="sourceInfo"></div>
-  </div>
-
-  <div class="group">
-    <h2>路线正文</h2>
-    <label>简介（intro）</label>
-    <textarea id="introHtml" rows="4" placeholder="路线简介..."></textarea>
-    <label>详细正文（content）</label>
-    <textarea id="contentHtml" rows="8" placeholder="详细描述..."></textarea>
-    <label>交通攻略（traffic）</label>
-    <textarea id="trafficHtml" rows="4" placeholder="交通信息..."></textarea>
-  </div>
-
-  <div class="group">
-    <h2>轨迹统计</h2>
-    <div class="track-info" id="trackStats">
-      <div class="item"><div class="val" id="statDistance">-</div><div class="label">总里程</div></div>
-      <div class="item"><div class="val" id="statClimb">-</div><div class="label">累计爬升</div></div>
-      <div class="item"><div class="val" id="statAlt">-</div><div class="label">最高海拔</div></div>
-      <div class="item"><div class="val" id="statTime">-</div><div class="label">参考耗时</div></div>
-    </div>
-  </div>
-
-  <div class="actions">
-    <button class="btn btn-cancel" onclick="window.location.href='index.html'">取消</button>
-    <button class="btn btn-save" onclick="save()">保存</button>
-  </div>
-</div>
-
+<div id="app"></div>
+<script src="layout.js"></script>
 <script>
-const urlParams = new URLSearchParams(window.location.search);
-const routeId = urlParams.get('id');
+const params = new URLSearchParams(window.location.search);
+// submissionId：提交记录 id（列表页「详情」入口，任何状态都能打开）
+// routeId     ：线路 id（审批通过后才有）
+// 两者都没有 → 空白新建模式：save() 会先 POST 建线路，拿到 routeId 后再写内容
+const submissionId = params.get('id');
+let routeId = params.get('routeId') || null;
+const isCreateMode = !submissionId && !routeId;
 
-function getToken() {
-  return localStorage.getItem('admin_token') || '';
-}
+Shell.mount({
+  active: 'routes',
+  title: submissionId ? '查看 / 编辑提交 #' + submissionId : (isCreateMode ? '新建线路' : '编辑线路'),
+  render(body, ctx) {
+    ctx.actions.innerHTML = '<a class="btn" href="index.html">← 返回列表</a>'
+      + ' <button class="btn btn-primary" onclick="save()">保存</button>';
 
+    body.innerHTML = `
+      <div class="banner" id="statusBanner" style="display:none"></div>
+
+      <div class="card">
+        <h2>一键解析</h2>
+        <div class="hint" style="margin-bottom:12px">
+          粘贴两步路 / 六只脚的线路链接，解析后自动填表。<b>解析只填表不落库</b>，确认内容再点保存。
+        </div>
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div style="flex:1">
+            <label class="f">来源链接</label>
+            <input type="text" id="parseUrl" placeholder="https://www.2bulu.com/mc/route/detail?id=... 或六只脚链接">
+          </div>
+          <button class="btn btn-primary" onclick="parseRoute()" style="height:36px;white-space:nowrap">解析填充</button>
+        </div>
+        <div class="hint" id="parseStatus" style="margin-top:10px;display:none"></div>
+      </div>
+
+      <div class="card">
+        <h2>基本信息</h2>
+        <div class="form-grid">
+          <div>
+            <label class="f">线路名称</label>
+            <input type="text" id="name" placeholder="如：武功山反穿线">
+          </div>
+          <div class="row-2">
+            <div>
+              <label class="f">地区</label>
+              <input type="text" id="region" placeholder="如 萍乡">
+            </div>
+            <div>
+              <label class="f">距离 (km)</label>
+              <input type="number" id="distanceKm" step="0.1" placeholder="0.0">
+            </div>
+          </div>
+          <div class="row-2">
+            <div>
+              <label class="f">爬升 (m)</label>
+              <input type="number" id="ascentMeters" placeholder="0">
+            </div>
+            <div>
+              <label class="f">标签（逗号分隔）</label>
+              <input type="text" id="tags" placeholder="登山,露营">
+            </div>
+          </div>
+          <div class="row-2">
+            <div>
+              <label class="f">封面图</label>
+              <input type="text" id="coverUrl" placeholder="点右侧上传或填 /uploads/...">
+            </div>
+            <div>
+              <label class="f">推荐到首页</label>
+              <select id="isRecommend">
+                <option value="false">否</option>
+                <option value="true">是</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="f">来源 URL</label>
+            <input type="text" id="sourceUrl" placeholder="来源链接（手工新建可留空）">
+          </div>
+        </div>
+        <div class="hint" id="sourceInfo" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h2>路线正文</h2>
+        <div class="form-grid">
+          <div>
+            <label class="f">简介</label>
+            <textarea id="introHtml" rows="4" placeholder="一句话说明这条线"></textarea>
+          </div>
+          <div>
+            <label class="f">详细正文</label>
+            <textarea id="contentHtml" rows="10" placeholder="行程、路况、补给、注意事项..."></textarea>
+          </div>
+          <div>
+            <label class="f">交通攻略</label>
+            <textarea id="trafficHtml" rows="4" placeholder="怎么到起点"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>轨迹统计</h2>
+        <div class="track-stats">
+          <div class="item"><div class="val" id="statPoints">-</div><div class="label">轨迹点</div></div>
+          <div class="item"><div class="val" id="statMarkers">-</div><div class="label">标注点</div></div>
+          <div class="item"><div class="val" id="statDistance">-</div><div class="label">总里程</div></div>
+          <div class="item"><div class="val" id="statClimb">-</div><div class="label">累计爬升</div></div>
+        </div>
+      </div>
+    `;
+
+    load();
+  }
+});
+
+/** 解析：只把结果填进表单，不落库 */
 async function parseRoute() {
   const url = document.getElementById('parseUrl').value.trim();
-  if (!url) { alert('请输入两步路链接'); return; }
-  const statusEl = document.getElementById('parseStatus');
-  statusEl.style.display = 'block';
-  statusEl.textContent = '解析中...';
+  if (!url) { Shell.toast('请先填链接', false); return; }
+  const st = document.getElementById('parseStatus');
+  st.style.display = 'block';
+  st.textContent = '解析中（要抓取第三方页面，可能需要几秒）...';
   try {
-    const resp = await fetch('/api/v1/admin/parse', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Admin-Token': getToken()
-      },
-      body: JSON.stringify({ url })
-    });
-    const data = await resp.json();
-    if (resp.status === 401 || data.code === 401) {
-      window.location.href = 'login.html';
-      return;
-    }
-    if (data.code === 0 && data.data) {
-      const r = data.data;
-      document.getElementById('name').value = r.name || '';
-      document.getElementById('region').value = r.region || '';
-      document.getElementById('distanceKm').value = r.distanceKm || '';
-      document.getElementById('ascentMeters').value = r.ascentMeters || '';
-      document.getElementById('introHtml').value = r.introHtml || '';
-      document.getElementById('contentHtml').value = r.contentHtml || '';
-      document.getElementById('trafficHtml').value = r.trafficHtml || '';
-      document.getElementById('sourceUrl').value = url;
-      statusEl.textContent = '解析成功：' + r.name + ' | ' + r.trackPointCount + '个轨迹点 | ' + r.markerCount + '个标注点';
-    } else {
-      statusEl.textContent = '解析失败：' + (data.msg || '未知错误');
-    }
+    const r = await Shell.api('/api/v1/admin/parse', { method: 'POST', body: JSON.stringify({ url: url }) });
+    setVal('name', r.name);
+    setVal('region', r.region);
+    setVal('distanceKm', r.distanceKm);
+    setVal('ascentMeters', r.ascentMeters);
+    setVal('introHtml', r.introHtml);
+    setVal('contentHtml', r.contentHtml);
+    setVal('trafficHtml', r.trafficHtml);
+    setVal('sourceUrl', url);
+    setVal('statPoints', r.trackPointCount);
+    setVal('statMarkers', r.markerCount);
+    setVal('statDistance', r.distanceKm + ' km');
+    setVal('statClimb', r.ascentMeters + ' m');
+    st.textContent = '解析成功：' + r.name + ' ｜ ' + r.trackPointCount + ' 个轨迹点 ｜ '
+      + r.markerCount + ' 个标注点（尚未保存）';
   } catch (e) {
-    statusEl.textContent = '网络错误，请确认服务端已启动';
+    st.textContent = '解析失败：' + e.message;
   }
 }
 
-async function loadRoute() {
-  if (!routeId) return;
-  document.getElementById('pageTitle').textContent = '编辑路线 #' + routeId;
-  try {
-    const resp = await fetch('/api/v1/routes/' + routeId);
-    const data = await resp.json();
-    if (data.code !== 0 || !data.data) { alert('路线不存在'); return; }
-    const r = data.data;
-    document.getElementById('name').value = r.name || '';
-    document.getElementById('region').value = r.region || '';
-    document.getElementById('distanceKm').value = r.distanceKm || '';
-    document.getElementById('ascentMeters').value = r.ascentMeters || '';
-    document.getElementById('tags').value = r.tags || '';
-    document.getElementById('coverUrl').value = r.coverUrl || '';
-    document.getElementById('isRecommend').value = r.isRecommend ? 'true' : 'false';
-    document.getElementById('sourceUrl').value = r.sourceUrl || '';
-    document.getElementById('introHtml').value = r.introHtml || '';
-    document.getElementById('contentHtml').value = r.contentHtml || '';
-    document.getElementById('trafficHtml').value = r.trafficHtml || '';
-    if (r.sourceName) {
-      document.getElementById('sourceInfo').textContent = '来源：' + r.sourceName + (r.sourceAuthor ? ' · ' + r.sourceAuthor : '');
+function setVal(id, v) {
+  const el = document.getElementById(id);
+  if (el) el.value = (v === null || v === undefined) ? '' : v;
+}
+
+/** 按线路 id 直接加载（运营手工新建的线路没有提交记录，只能走这条）。 */
+async function loadFromRoute(id) {
+  const r = await Shell.api('/api/v1/admin/routes/' + id + '/detail');
+  applyDetail(r);
+  const banner = document.getElementById('statusBanner');
+  banner.style.display = 'block';
+  banner.style.background = r.routeStatus === 0 ? '#eceff1' : '#e8f5e9';
+  banner.style.color = r.routeStatus === 0 ? '#546e7a' : '#2e7d32';
+  banner.textContent = (r.routeStatus === 0 ? '该线路已下架（改完内容后可到列表页重新上架）' : '已上线')
+    + (r.sourceName && r.sourceName !== 'manual' ? ' · 来源：' + r.sourceName : ' · 手工创建');
+  document.getElementById('sourceInfo').textContent = r.sourceName && r.sourceName !== 'manual'
+    ? '来源：' + r.sourceName + ' · 轨迹点 ' + r.trackPointCount + ' 个 · 标注 ' + r.markerCount + ' 个'
+    : '手工创建，无抓取轨迹';
+}
+
+/** detail → 表单。两条加载路径（提交 / 线路）共用，避免填表逻辑写两遍。 */
+function applyDetail(r) {
+  setVal('name', r.name);
+  setVal('region', r.region);
+  setVal('distanceKm', r.distanceKm);
+  setVal('ascentMeters', r.ascentMeters);
+  setVal('tags', r.tags);
+  setVal('coverUrl', r.coverUrl);
+  setVal('isRecommend', r.isRecommend ? 'true' : 'false');
+  setVal('sourceUrl', r.sourceUrl);
+  setVal('parseUrl', r.sourceUrl);
+  setVal('introHtml', r.introHtml);
+  setVal('contentHtml', r.contentHtml);
+  setVal('trafficHtml', r.trafficHtml);
+  setVal('statPoints', r.trackPointCount || '-');
+  setVal('statMarkers', r.markerCount || '-');
+  setVal('statDistance', r.distanceKm ? r.distanceKm + ' km' : '-');
+  setVal('statClimb', r.ascentMeters ? r.ascentMeters + ' m' : '-');
+}
+
+function val(id) {
+  const el = document.getElementById(id);
+  return el ? String(el.value).trim() : '';
+}
+
+async function load() {
+  const banner = document.getElementById('statusBanner');
+
+  // 空白新建：不必先有用户提交，运营可以直接建一条线
+  if (!submissionId && !routeId) {
+    banner.style.display = 'block';
+    banner.style.background = '#e8f1fb';
+    banner.style.color = '#1565c0';
+    banner.textContent = '空白新建：可直接填写并保存，或用上方「解析填充」从链接导入。'
+      + '保存后会立即出现在 App 线路列表中。';
+    return;
+  }
+
+  // 只有 routeId 没有 submissionId：从列表页"编辑"进来的已有线路
+  if (!submissionId && routeId) {
+    try {
+      await loadFromRoute(routeId);
+    } catch (e) {
+      Shell.toast('加载失败：' + e.message, false);
     }
+    return;
+  }
+
+  try {
+    // 走后台接口而不是公开的 /api/v1/routes/{id}：公开接口依赖 route_detail，
+    // 待审批 / 已驳回的提交点进去会一律报"路线不存在"。
+    const r = await Shell.api('/api/v1/admin/submissions/' + submissionId + '/detail');
+    routeId = r.routeId;
+    applyDetail(r);
+
+    // 状态横幅：任何状态都能打开，但要一眼看出处在哪一步
+    const map = {
+      PENDING: ['#fff3e0', '#e65100', '待审批 —— 内容尚未入库，可点「解析填充」预览抓取结果；先在列表页「通过并抓取」才能保存'],
+      APPROVED: ['#e8f5e9', '#2e7d32', r.routeStatus === 0 ? '已通过但线路当前已下架' : '已上线'],
+      REJECTED: ['#fce4ec', '#c62828', '已驳回' + (r.rejectReason ? '：' + r.rejectReason : '')]
+    };
+    const s = map[r.submissionStatus] || ['#eee', '#666', r.submissionStatus || '未知状态'];
+    banner.style.display = 'block';
+    banner.style.background = s[0];
+    banner.style.color = s[1];
+    banner.textContent = s[2] + (r.hasDetail ? '' : '（暂无抓取内容）');
+
+    document.getElementById('sourceInfo').textContent = r.sourceName
+      ? '来源：' + r.sourceName + (r.sourceAuthor ? ' · ' + r.sourceAuthor : '')
+      : '尚未抓取内容';
   } catch (e) {
-    alert('网络错误');
+    Shell.toast('加载失败：' + e.message, false);
   }
 }
 
 async function save() {
   const body = {
-    name: document.getElementById('name').value.trim(),
-    region: document.getElementById('region').value.trim(),
-    distanceKm: parseFloat(document.getElementById('distanceKm').value) || 0,
-    ascentMeters: parseInt(document.getElementById('ascentMeters').value) || 0,
-    tags: document.getElementById('tags').value.trim(),
-    coverUrl: document.getElementById('coverUrl').value.trim(),
-    isRecommend: document.getElementById('isRecommend').value === 'true',
+    name: val('name'),
+    region: val('region'),
+    distanceKm: parseFloat(val('distanceKm') || '0'),
+    ascentMeters: parseInt(val('ascentMeters') || '0', 10),
+    tags: val('tags'),
+    coverUrl: val('coverUrl'),
+    isRecommend: val('isRecommend') === 'true',
     introHtml: document.getElementById('introHtml').value,
     contentHtml: document.getElementById('contentHtml').value,
     trafficHtml: document.getElementById('trafficHtml').value
   };
-  const resp = await fetch('/api/v1/admin/routes/' + routeId, {
-    method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Admin-Token': getToken()
-    },
-    body: JSON.stringify(body)
-  });
-  const data = await resp.json();
-  if (data.code === 0) {
-    alert('保存成功');
-    window.location.href = 'index.html';
-  } else {
-    alert('保存失败：' + (data.msg || '未知错误'));
-  }
-}
+  if (!body.name) { Shell.toast('请填线路名称', false); return; }
 
-// 未登录自动跳转
-if (!getToken()) {
-    window.location.href = 'login.html';
-} else {
-    loadRoute();
+  try {
+    // 新建：先建线路拿 id，再走同一条 PUT 写入内容。
+    // 不做一个"大而全的 POST"：两段分开后，解析填充后再改字段的路径与编辑完全一致，少一条分支。
+    if (!routeId) {
+      const created = await Shell.api('/api/v1/admin/routes', {
+        method: 'POST',
+        body: JSON.stringify(Object.assign({}, body, { sourceUrl: val('sourceUrl') }))
+      });
+      routeId = created;
+      history.replaceState(null, '', 'edit.html?routeId=' + routeId);
+      Shell.toast('已创建线路 #' + routeId);
+      const b = document.getElementById('statusBanner');
+      b.style.display = 'block';
+      b.style.background = '#e8f5e9';
+      b.style.color = '#2e7d32';
+      b.textContent = '线路已创建（#' + routeId + '），已上线。后续修改直接点保存即可。';
+      document.querySelector('.page-head h1').textContent = '编辑线路 #' + routeId;
+      return;
+    }
+    await Shell.api('/api/v1/admin/routes/' + routeId, { method: 'PUT', body: JSON.stringify(body) });
+    Shell.toast('已保存');
+  } catch (e) {
+    Shell.toast('保存失败：' + e.message, false);
+  }
 }
 </script>
 </body>

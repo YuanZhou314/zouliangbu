@@ -101,6 +101,14 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ApiResponse.ErrorCode.BAD_REQUEST, "请求方法不支持"));
     }
 
+    /** 鉴权业务异常（用户名被占用 / 密码错误等）：code 来自 AuthService，状态码按 code 映射。 */
+    @ExceptionHandler(com.zouliangbu.server.auth.ApiException.class)
+    public ResponseEntity<ApiResponse<Void>> onAuthApi(com.zouliangbu.server.auth.ApiException e) {
+        log.warn("auth error: code={} msg={}", e.code, e.getMessage());
+        return ResponseEntity.status(ApiResponse.httpStatusOf(e.code))
+                .body(ApiResponse.fail(e.code, e.getMessage()));
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> onUnknown(Exception e) {
         log.error("unhandled exception", e);

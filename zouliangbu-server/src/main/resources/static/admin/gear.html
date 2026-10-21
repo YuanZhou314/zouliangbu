@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>装备分类 · 走两步管理后台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app"></div>
+
+<div class="modal-bg" id="editModal">
+  <div class="modal">
+    <h2 id="modalTitle">新增装备分类</h2>
+    <div class="field">
+      <label class="f">code（与 App 图标映射的键，如 g1）</label>
+      <input type="text" id="f-code" maxlength="16" placeholder="g1">
+      <div class="hint">新增后<b>不可修改</b>：App 侧靠它匹配图标，改了会画不出图。</div>
+    </div>
+    <div class="field">
+      <label class="f">名称（必填，≤32 字）</label>
+      <input type="text" id="f-name" maxlength="32" placeholder="如 背包">
+    </div>
+    <div class="field">
+      <label class="f">说明（≤64 字）</label>
+      <input type="text" id="f-note" maxlength="64" placeholder="如 一日 / 多日背负">
+    </div>
+    <div class="field" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label class="f">图标键</label>
+        <input type="text" id="f-iconKey" maxlength="32" placeholder="backpack">
+      </div>
+      <div>
+        <label class="f">排序权重（小在前）</label>
+        <input type="number" id="f-sortWeight" placeholder="100">
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="save()">保存</button>
+    </div>
+  </div>
+</div>
+
+<script src="layout.js"></script>
+<script>
+let rows = [];
+let editingId = null;
+
+Shell.mount({
+  active: 'gear',
+  title: '装备分类',
+  render(body, ctx) {
+    ctx.actions.innerHTML = '<button class="btn btn-primary" onclick="openModal()">+ 新增分类</button>';
+    body.innerHTML = `
+      <div class="card">
+        <div class="hint" style="margin-bottom:14px">
+          这里的 code 与 App 侧图标映射绑定（g1..g8）。改名称/排序安全，改 code 会导致 App 图标错位，所以不提供修改。
+        </div>
+        <div id="tableWrap"><div class="empty">加载中...</div></div>
+      </div>
+    `;
+    load();
+  }
+});
+
+async function load() {
+  const wrap = document.getElementById('tableWrap');
+  try {
+    rows = await Shell.api('/api/v1/admin/gear');
+  } catch (e) {
+    wrap.innerHTML = '<div class="empty">加载失败：' + Shell.esc(e.message) + '</div>';
+    return;
+  }
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="empty">还没有装备分类</div>';
+    return;
+  }
+  wrap.innerHTML = `
+    <table>
+      <thead><tr>
+        <th style="width:70px">code</th>
+        <th style="width:120px">名称</th>
+        <th>说明</th>
+        <th style="width:110px">图标键</th>
+        <th style="width:80px">排序</th>
+        <th style="width:80px">操作</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td class="mono">${Shell.esc(r.code)}</td>
+            <td>${Shell.esc(r.name)}</td>
+            <td class="wrap">${Shell.esc(r.note || '')}</td>
+            <td class="mono">${Shell.esc(r.iconKey || '')}</td>
+            <td>${r.sortWeight}</td>
+            <td><button class="btn btn-sm" onclick="openModal(${r.id})">编辑</button></td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function openModal(id) {
+  editingId = id || null;
+  const r = id ? rows.find(x => x.id === id) : null;
+  document.getElementById('modalTitle').textContent = id ? '编辑装备分类 #' + id : '新增装备分类';
+  const codeEl = document.getElementById('f-code');
+  codeEl.value = r ? r.code : '';
+  codeEl.disabled = !!r;   // 编辑态锁死 code，与服务端行为一致
+  document.getElementById('f-name').value = r ? r.name : '';
+  document.getElementById('f-note').value = r ? (r.note || '') : '';
+  document.getElementById('f-iconKey').value = r ? (r.iconKey || '') : '';
+  document.getElementById('f-sortWeight').value = r ? r.sortWeight : 100;
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('editModal').classList.remove('show');
+  editingId = null;
+}
+
+async function save() {
+  const body = {
+    code: document.getElementById('f-code').value.trim(),
+    name: document.getElementById('f-name').value.trim(),
+    note: document.getElementById('f-note').value.trim(),
+    iconKey: document.getElementById('f-iconKey').value.trim(),
+    sortWeight: parseInt(document.getElementById('f-sortWeight').value || '100', 10)
+  };
+  if (!editingId && !body.code) { Shell.toast('请填 code', false); return; }
+  if (!body.name) { Shell.toast('请填名称', false); return; }
+  try {
+    if (editingId) {
+      await Shell.api('/api/v1/admin/gear/' + editingId, { method: 'PUT', body: JSON.stringify(body) });
+    } else {
+      await Shell.api('/api/v1/admin/gear', { method: 'POST', body: JSON.stringify(body) });
+    }
+    Shell.toast('已保存');
+    closeModal();
+    load();
+  } catch (e) {
+    Shell.toast(e.message, false);
+  }
+}
+</script>
+</body>
+</html>

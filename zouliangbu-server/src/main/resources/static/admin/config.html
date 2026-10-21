@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配置中心 · 走两步管理后台</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app"></div>
+<script src="layout.js"></script>
+<script>
+let current = {};
+
+Shell.mount({
+  active: 'config',
+  title: '配置中心',
+  async render(body, ctx) {
+    ctx.actions.innerHTML = '<button class="btn btn-primary" onclick="save()">保存配置</button>';
+    body.innerHTML = '<div class="empty">加载中...</div>';
+    let rows;
+    try {
+      rows = await Shell.api('/api/v1/admin/config');
+    } catch (e) {
+      body.innerHTML = '<div class="empty">加载失败：' + Shell.esc(e.message) + '</div>';
+      return;
+    }
+    rows.forEach(r => { current[r.key] = r.value; });
+
+    body.innerHTML = `
+      <div class="card">
+        <h2>版本强更</h2>
+        <div class="hint" style="margin-bottom:14px">
+          开启后，App 会在启动时弹窗要求更新。<b>必须填下载地址</b>，否则服务端会自动当作未开启
+          （避免用户点了没反应卡死）。
+        </div>
+        <div class="field">
+          <label class="f">是否开启</label>
+          <select id="c-force_update.enabled">
+            <option value="false">关闭</option>
+            <option value="true">开启</option>
+          </select>
+        </div>
+        <div class="field" style="display:grid;grid-template-columns:1fr 2fr;gap:12px">
+          <div>
+            <label class="f">最低 versionCode</label>
+            <input type="number" id="c-force_update.min_version" placeholder="0">
+            <div class="hint">App 的 versionCode 低于此值才强制更新</div>
+          </div>
+          <div>
+            <label class="f">APK 下载地址</label>
+            <input type="text" id="c-force_update.url" placeholder="https://.../app.apk">
+          </div>
+        </div>
+        <div class="field">
+          <label class="f">弹窗文案</label>
+          <input type="text" id="c-force_update.message" placeholder="如：有新版本可用，修复了轨迹记录问题">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>首页公告</h2>
+        <div class="hint" style="margin-bottom:14px">开启后 App 首页顶部显示一条公告。文案为空时不展示。</div>
+        <div class="field">
+          <label class="f">是否开启</label>
+          <select id="c-notice.enabled">
+            <option value="false">关闭</option>
+            <option value="true">开启</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="f">公告文案</label>
+          <input type="text" id="c-notice.text" placeholder="如：本周六梧桐山夜爬活动报名中">
+        </div>
+        <div class="field">
+          <label class="f">跳转链接（可空）</label>
+          <input type="text" id="c-notice.link" placeholder="https://...">
+        </div>
+      </div>
+    `;
+
+    // 回填：用 current 而不是直接拼进 HTML，避免值里的引号破坏结构
+    rows.forEach(r => {
+      const el = document.getElementById('c-' + r.key);
+      if (el) el.value = r.value || (el.tagName === 'SELECT' ? 'false' : '');
+    });
+  }
+});
+
+async function save() {
+  const keys = [
+    'force_update.enabled', 'force_update.min_version', 'force_update.url', 'force_update.message',
+    'notice.enabled', 'notice.text', 'notice.link'
+  ];
+  const body = {};
+  keys.forEach(k => {
+    const el = document.getElementById('c-' + k);
+    if (el) body[k] = el.value.trim();
+  });
+  try {
+    await Shell.api('/api/v1/admin/config', { method: 'PUT', body: JSON.stringify(body) });
+    Shell.toast('配置已保存');
+  } catch (e) {
+    Shell.toast(e.message, false);
+  }
+}
+</script>
+</body>
+</html>
