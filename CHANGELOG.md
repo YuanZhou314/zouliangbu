@@ -9,6 +9,43 @@
 
 ---
 
+## [2026-10-21] App 接入云服务器（S5 半程）：BASE_URL 切换 + 明文 HTTP 放行
+
+### 触发
+用户已把 server 部署到云服务器 `http://82.156.84.127:8080`，要求验证并把 App 的服务端地址改过去。
+
+### 部署验证（curl 实测，非推测）
+| 接口 | 结果 |
+|---|---|
+| `/api/v1/healthz` | HTTP 200 `{"status":"ok"}`，195ms |
+| `/api/v1/feed?size=2` | 200，`coverStyle` 字段**在位**（c624cc6 修的那个 S4 首屏必崩点已闭环） |
+| `/api/v1/routes` | 200，recommendations + sections 结构正确 |
+| `/api/v1/gear/categories` | 200，8 分类齐全 |
+
+注意：云上库还是**种子数据**（武功山/四姑娘山那 12 条，与 Mock 文案一致），
+App 首页从 Mock 切到 Remote 后**视觉上不会有任何变化**——这是预期行为，不是没生效。
+
+### App 侧改动（3 个文件）
+1. `ContentApiFactory.kt`：`BASE_URL` `10.0.2.2:8080`（模拟器回环）→ `82.156.84.127:8080`
+2. **新增** `res/xml/network_security_config.xml` + Manifest 引用：
+   targetSdk 28+ 默认禁明文 HTTP，不放行的话真机 Retrofit **静默连不上**、悄悄回退 Mock、
+   无任何报错——这是最容易"以为没生效"的坑。release 精确放行该 IP（NSC 不支持 CIDR）。
+3. **新增** `src/debug/res/xml/network_security_config.xml`（debug 全放开，方便以后本地调试任意 IP；
+   release 不进此 sourceSet，仍按白名单）。
+
+### 校验
+- `testDebugUnitTest` 64/64 绿（NSC 不影响 JVM 测试）；`assembleDebug` → **0.1.0.000013 / 54.8MB**
+- aapt2 确认 APK：Manifest 带 `networkSecurityConfig`、NSC 文件已打进 res/xml/、
+  新 IP 存在于编译产物 `ContentApiFactory.class`
+
+### 遗留（S5 剩余）
+- HTTPS：现在靠 NSC 放行 IP 只能 HTTP；长期应上域名 + Let's Encrypt（国内服务器需备案）
+- MySQL 备份 / 日志滚动 / 拨测监控：仍无
+- 真机验证"首页/线路页显示的是云数据"仍未做（本机只出包）
+
+---
+
+
 ## [2026-10-20] 路线内容平台：两步路链接导入 + 审批 + 管理后台 + 线路详情页
 
 ### 功能

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  网络安全配置（P6 S4）。
+
+  背景：targetSdk 28+ 默认禁止明文 HTTP。当前服务端还是 http://82.156.84.127:8080，
+  必须为它显式放行，否则真机上 Retrofit 会静默连接失败、Remote 仓库回退 Mock，
+  表现为"内容怎么都是假的"且无任何报错。
+
+  注意：network_security_config 的 <domain> 不支持 CIDR，只能写具体 IP。
+  服务端上 HTTPS 后：把这里的 domain-config 删掉即可（HTTPS 不受 cleartext 限制）。
+
+  debug 构建另有 src/debug/res/xml/ 下的同名资源覆盖本文件（全放开，方便本地调试）。
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain>82.156.84.127</domain>
+    </domain-config>
+</network-security-config>

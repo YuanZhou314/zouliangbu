@@ -33,8 +33,8 @@ import java.util.concurrent.TimeUnit
  */
 object ContentApiFactory {
 
-    /** 本地开发默认 10.0.2.2（模拟器访问宿主机）。真机调试要改成实际 IP。 */
-    const val BASE_URL = "http://10.0.2.2:8080"
+    /** 云服务器（2026-10-21 部署，四接口已 curl 验证）。上 HTTPS 后改成 https 域名即可。 */
+    const val BASE_URL = "http://82.156.84.127:8080"
 
     /** 单例 Retrofit。 */
     val service: ContentService by lazy { build() }

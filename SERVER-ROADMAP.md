@@ -200,6 +200,13 @@ FootprintApp.kt                        只改 3 行：Mock → Remote
 
 ## 5. S5 · 上线运维（有服务器就做）
 
+> **2026-10-21 进展**：用户已把 server 部署到云服务器 `http://82.156.84.127:8080`，
+> 四接口（healthz / feed / routes / gear/categories）curl 全通，`coverStyle` 字段在位；
+> App 侧 `BASE_URL` 已切到该地址，明文 HTTP 已用 network_security_config 放行（debug 全放开，release 精确 IP）。
+> **S5 状态从 ⏸ 变为 🟡**：HTTPS / 备份 / 日志 / 监控四项仍未做。上表"IP 只能 HTTP + App 禁明文"的死锁，
+> 实际解法是 NSC 按域名放行（见 `app/src/main/res/xml/network_security_config.xml` 注释），
+> 但长期仍应上 HTTPS（域名 + 备案或 hk 域名）。
+
 你说过"先跑通本地"，所以这一节是**将来真要外网访问时**的清单。
 
 | 项 | 做法（业内常规） | 备注 |

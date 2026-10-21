@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  debug 构建的网络安全配置：全量放开明文 HTTP。
+  覆盖 main 的同名资源，方便本地调试（模拟器 10.0.2.2 / 任意局域网 IP 都能连）。
+  release 构建不进这个 sourceSet，仍按 main 的精确 IP 白名单执行。
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
