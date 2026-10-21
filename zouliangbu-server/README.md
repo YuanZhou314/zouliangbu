@@ -6,14 +6,11 @@ App 内容层（首页动态 / 线路 / 装备分类）的后端。**轨迹数�
 - 接口版本：`/api/v1`，统一响应 `{ code, msg, data }`
 - 路线导入：用户提交**两步路 / 六只脚**行程链接 → 后台审批 → 抓取解析入库（`route` + `route_detail` + `route_track_point`）
 
-## 一、本地跑（零依赖，推荐先这样验）
+## 一、本地跑（零依赖）
 
-dev profile 用 **SQLite 单文件库**（`zouliangbu-server/zlb-dev.db`，已被 gitignore）+ Flyway 自动建表灌种子数据，
-**不需要 Docker、不需要装 MySQL、不需要装 Maven 之外的任何东西**；重启服务数据不丢（这是选 SQLite 而不是 H2 内存库的原因）。
-
-要换库文件位置就设环境变量：`SQLITE_PATH=/var/lib/zlb/zlb.db`。
-注意 SQLite 是单写者模型，连接池必须为 1（`application-dev.yml` 已设 `maximum-pool-size: 1` + `busy_timeout`），
-**不要为了"提高并发"把它调大**，否则会撞 `SQLITE_BUSY`。
+dev 用 **SQLite 单文件库** `zlb-dev.db`（启动目录，已 gitignore）+ Flyway 自动建表灌种子，不需要 Docker / MySQL。
+数据落盘，重启不丢。换库位置：`SQLITE_PATH=/var/lib/zlb/zlb.db`。
+SQLite 单写者，连接池已固定 1，**不要调大**（会撞 `SQLITE_BUSY`）。
 
 最省事（自动校验 JDK、打包、检查端口）：
 
@@ -62,29 +59,19 @@ MySQL 与 api 同 compose 内网，3306 **不对外暴露**。正式对外请在
 | GET | `/api/v1/routes` | `keyword`、`city` | 线路目录（推荐位 + 分组）；有关键词时隐藏推荐位 |
 | GET | `/api/v1/gear/categories` | — | 装备分类（静态，可长缓存） |
 | GET | `/api/v1/healthz` | — | 存活检查 |
-
-### 路线内容（导入 / 审批）
-
-| 方法 | 路径 | 参数 / Body | 说明 |
-|---|---|---|---|
-| POST | `/api/v1/routes/submit` | `{sourceUrl, submitterUuid, submitterNote}` | 用户提交**两步路或六只脚**行程链接；只存待审记录，不抓取 |
-| GET | `/api/v1/routes/submissions/{id}` | — | 查提交状态：`PENDING` / `APPROVED` / `REJECTED` |
-| GET | `/api/v1/routes/{id}` | — | 线路详情（正文 / 交通 / 难度 / 距离 / 爬升 / 点数） |
+| POST | `/api/v1/routes/submit` | `{sourceUrl, submitterUuid, submitterNote}` | 提交两步路 / 六只脚链接，只存待审、不抓取 |
+| GET | `/api/v1/routes/submissions/{id}` | — | 提交状态 `PENDING`/`APPROVED`/`REJECTED` |
+| GET | `/api/v1/routes/{id}` | — | 线路详情（正文 / 难度 / 距离 / 爬升 / 点数） |
 | GET | `/api/v1/routes/{id}/track` | — | 轨迹点（GCJ-02） |
-| GET | `/api/v1/routes/{id}/markers` | — | 标注点（六只脚暂无标注点，返回空数组） |
-| POST | `/api/v1/admin/login` | `{password}` | 换 `X-Admin-Token`（默认密码见 `application.yml`） |
+| GET | `/api/v1/routes/{id}/markers` | — | 标注点（六只脚为空） |
+| POST | `/api/v1/admin/login` | `{password}` | 换 `X-Admin-Token` |
 | GET | `/api/v1/admin/submissions?status=PENDING` | 头 `X-Admin-Token` | 待审批列表 |
-| POST | `/api/v1/admin/submissions/{id}/approve` | 同上 | **审批通过 → 真抓取解析 → 落 route/详情/轨迹/标注** |
-| POST | `/api/v1/admin/submissions/{id}/reject` | `{reason}` | 驳回 |
-| POST | `/api/v1/admin/parse` | `{url}` | 只解析不入库（编辑页预览用） |
+| POST | `/api/v1/admin/submissions/{id}/approve` | 同上 | 审批通过 → 抓取解析入库 |
+| POST | `/api/v1/admin/submissions/{id}/reject` | 同上 `{reason}` | 驳回 |
+| POST | `/api/v1/admin/parse` | 同上 `{url}` | 只解析不入库（预览） |
 
-支持的链接形式：
-
-- 两步路：`https://www.2bulu.com/mc/route/detail?id=<id>`
-- 六只脚：`https://www.foooooot.com/trip/<id>/`、`https://www.foooooot.com/mobile/trip/<id>/`
-
-平台按域名自动识别（`RoutePlatform.detect`），未知域名在提交阶段直接 1001。
-六只脚只取行程详情 / 正文 / 数字与轨迹，**脚印图片不抓**（正文里的 `<img>` 会被剥掉）。
+链接：两步路 `...route/detail?id=<id>`；六只脚 `/trip/<id>/`（含 `/mobile/`）。域名不认识直接 1001。
+六只脚不抓脚印图片，正文 `<img>` 全剥。
 
 响应示例：
 

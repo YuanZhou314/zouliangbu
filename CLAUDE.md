@@ -6,9 +6,12 @@
 ## 项目一句话
 极简户外 GPS 轨迹记录 Android App（最小化两步路）。Kotlin + Compose + 高德 + Room。
 
+## 文档纪律（用户明确要求，2026-10-21）
+写 README / CHANGELOG / ROADMAP 等文档要**短**：只留结论、命令、踩坑点。
+不写论证过程、不贴验收流水账、不重复代码里已有的信息。表格能一行说完就别拆三段。
+
 ## 验证纪律（用户明确要求，2026-10-20）
 **默认不测。** 用户自己会装包实测，助手不要把 token 烧在反复验证上。
-
 - 只有用户**明确说**「跑一下 / 验证 / 装模拟器」时才动手测，且**一轮测完就停**。
 - 一轮测试的默认范围：装包 → 启动 → 跑完一条主链路（记录→停止→列表→详情）→ 报结论。
   不做像素采样、颜色统计、逐点 DB 遍历、多分支对比构建等**深挖式验证**。
@@ -311,18 +314,14 @@
   null 会让 kotlinx.serialization 直接抛异常。
 - **轨迹数据永不上云**：服务端只有内容表（feed_post / route_section / route / gear_category）。
 - 响应统一 `{code,msg,data}`；客户端传错走 4xx（code 1001/1004），服务端故障走 500（code 5000）。
-- 改表：只新增 `V{n}__xxx.sql`，**不要改已执行的 V1/V2/V3**。
-- **迁移脚本按方言分目录**（2026-10-21 起）：`db/migration/sqlite/`、`db/migration/mysql/`、`db/migration/common/`。
-  `{vendor}` 占位符没用，**locations 在 profile 里显式指定**：dev/test → `sqlite,common`；prod → `mysql,common`。
-  写新迁移时：纯数据（INSERT/UPDATE）放 `common`，DDL 两边各写一份；SQLite 自增主键必须写
-  `INTEGER PRIMARY KEY AUTOINCREMENT`（`BIGINT AUTO_INCREMENT` 在 SQLite 里不自增，且是语法错误）。
-- **SQLite 连接池必须 1**（`maximum-pool-size: 1` + `PRAGMA busy_timeout=5000`）：SQLite 单写者模型，
-  调大必然撞 `SQLITE_BUSY`。dev 库文件 `zouliangbu-server/zlb-dev.db`（gitignore），可用 `SQLITE_PATH` 改路径。
-- **测试必须 `@ActiveProfiles("test")`**：test profile 用 `jdbc:sqlite:file:zlb-test?mode=memory&cache=shared`，
-  不写就会写进 dev 的实体库文件、且数据跨次累积。
-- **路线导入走平台路由**：`RoutePlatform.detect(url)` → `TWOBULU`（`2bulu.com`）/ `SIXFOOT`（`foooooot.com`），
-  解析结果统一填 `RouteData.ParsedRoute`（GCJ-02）。加新平台 = 枚举 + `RouteImportService.fetch` 分支 + 一个 Client。
-  六只脚**只取行程详情/正文/数字/轨迹，脚印图片一律剥掉**（`SixFoot.stripFootprintImages`）。
+- 改表：只新增 `V{n}__xxx.sql`，不改已执行的 V1/V2/V3。DDL 按方言放 `db/migration/{sqlite,mysql}/`，
+  纯数据放 `common/`，locations 在 profile 显式指定（`{vendor}` 无效）。SQLite 自增主键 =
+  `INTEGER PRIMARY KEY AUTOINCREMENT`（`BIGINT AUTO_INCREMENT` 会语法错）。
+- SQLite：连接池固定 1（单写者，调大撞 `SQLITE_BUSY`）；dev 库 `zlb-dev.db`（`SQLITE_PATH` 可改）；
+  测试必须 `@ActiveProfiles("test")`（共享内存库，否则污染 dev 库文件）。
+- 路线导入：`RoutePlatform.detect` 按域名路由（`2bulu.com` / `foooooot.com`），解析结果统一
+  `RouteData.ParsedRoute`。加平台 = 枚举 + `RouteImportService.fetch` 分支 + Client。
+  六只脚不抓脚印图片（正文 `<img>` 全剥）。
 - 接口字段名必须与 App 的 `data/model/*.kt` 逐字段一致——这样换 Remote 实现时 UI/ViewModel 零改动。
 
 ## 构建 & 调试
