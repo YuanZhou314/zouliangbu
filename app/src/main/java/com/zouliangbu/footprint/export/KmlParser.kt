@@ -72,7 +72,11 @@ object KmlParser {
         private var captureCoord = false
         private val coordText = StringBuilder()
 
-        // LineString/coordinates 收集
+        // LineString/coordinates 收集。
+        // 必须只认 LineString 里的 <coordinates>：两步路导出的 KML 里「标注点」文件夹还用
+        // <Point><coordinates> 放起点/终点标记，若不区分会被当成轨迹点插到列表最前面，
+        // 把后面所有点的时间配对整体错位（实测 1676 点里前 18 个时间全 null）。
+        private var lineDepth = 0
         private var inCoordinates = false
         private val lineText = StringBuilder()
 
@@ -94,8 +98,8 @@ object KmlParser {
                     captureCoord = true
                     coordText.setLength(0)
                 }
-                "linestring" -> Unit
-                "coordinates" -> {
+                "linestring" -> lineDepth++
+                "coordinates" -> if (lineDepth > 0) {
                     inCoordinates = true
                     lineText.setLength(0)
                 }
@@ -130,8 +134,9 @@ object KmlParser {
                     trackDepth--
                     flushTrack()
                 }
+                "linestring" -> if (lineDepth > 0) lineDepth--
                 "coordinates" -> {
-                    flushLineString(lineText.toString())
+                    if (inCoordinates) flushLineString(lineText.toString())
                     inCoordinates = false
                 }
                 "name" -> {

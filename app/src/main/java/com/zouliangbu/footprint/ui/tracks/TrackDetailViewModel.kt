@@ -19,6 +19,7 @@ import com.zouliangbu.footprint.util.Elevation
 import com.zouliangbu.footprint.util.Pace
 import com.zouliangbu.footprint.util.Polyline
 import com.zouliangbu.footprint.util.SegmentMatch
+import com.zouliangbu.footprint.util.TrackSeries
 import com.zouliangbu.footprint.util.TrackSplits
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,8 +40,14 @@ data class TrackDetailUi(
     /** 爬升/下降（米，ROADMAP P3.1）。 */
     val ascentMeters: Double = 0.0,
     val descentMeters: Double = 0.0,
+    /** 最高海拔（米）。没有高程数据时为 0，UI 显示成 "—" 而不是 0。 */
+    val maxAltitude: Double = 0.0,
+    /** 最低海拔（米），同样 0 表示没有高程数据。 */
+    val minAltitude: Double = 0.0,
     /** 每公里分段（ROADMAP P3.5）。 */
     val splits: List<TrackSplits.Split> = emptyList(),
+    /** 图表序列：速度 / 配速 / 海拔 / 累计爬升下降（见 TrackSeries）。 */
+    val series: TrackSeries.Bundle = TrackSeries.Bundle(),
     /** 与历史记录的共同路段对比（记录层做深的核心功能）。 */
     val compare: CompareUi = CompareUi()
 )
@@ -108,7 +115,10 @@ class TrackDetailViewModel(
                 paceStats = Pace.statsOf(raw),
                 ascentMeters = ascent,
                 descentMeters = descent,
-                splits = TrackSplits.splitsOf(raw)
+                maxAltitude = raw.maxOfOrNull { it.altitude } ?: 0.0,
+                minAltitude = raw.filter { it.altitude > 0.0 }.minOfOrNull { it.altitude } ?: 0.0,
+                splits = TrackSplits.splitsOf(raw),
+                series = TrackSeries.build(raw)
             )
 
             // 对比单独一步：它要读别的会话的点集，慢且可能失败，不能拖累首屏。
