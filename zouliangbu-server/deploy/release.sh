@@ -7,7 +7,7 @@
 #
 # 配置全部走环境变量，或用 scripts/deploy.env 文件（自动 source）：
 #   ZLB_HOST       服务器 IP/域名        默认 82.156.84.127
-#   ZLB_USER       ssh 用户              默认 root
+#   ZLB_USER       ssh 用户              默认 ubuntu（线上实际登录用户）
 #   ZLB_PORT       ssh 端口              默认 22
 #   ZLB_REMOTE_DIR 远端目录              默认 /opt/zouliangbu-server
 #   ZLB_SERVICE    systemd 单元名        默认 zouliangbu-server
@@ -31,7 +31,9 @@ if [[ -f "$SCRIPT_DIR/deploy.env" ]]; then
 fi
 
 ZLB_HOST="${ZLB_HOST:-82.156.84.127}"
-ZLB_USER="${ZLB_USER:-root}"
+# 服务器上只有 ubuntu 能登录（root 的 SSH 是关的），默认值跟着实际走，
+# 省得每次都要 ZLB_USER=ubuntu 前缀；root 登录的机器用环境变量覆盖即可。
+ZLB_USER="${ZLB_USER:-ubuntu}"
 ZLB_PORT="${ZLB_PORT:-22}"
 ZLB_REMOTE_DIR="${ZLB_REMOTE_DIR:-/opt/zouliangbu-server}"
 ZLB_SERVICE="${ZLB_SERVICE:-zouliangbu-server}"
@@ -165,7 +167,16 @@ scp -P "$ZLB_PORT" ${ZLB_KEY:+-i "$ZLB_KEY"} -o StrictHostKeyChecking=accept-new
   "target/$JAR_NAME" "$TARGET:$ZLB_REMOTE_DIR/$REMOTE_REL/app.jar"
 
 # 校验传输完整性
-LOCAL_SUM="$(md5sum "target/$JAR_NAME" | cut -d' ' -f1)"
+# macOS 没有 md5sum（只有 md5 -q），直接用 md5sum 会让脚本在 mac 上停在"上传"这一步，
+# 而且是中途失败、远端已经建了空 release 目录。这里做个兼容。
+md5_of() {
+  if command -v md5sum >/dev/null 2>&1; then
+    md5sum "$1" | cut -d' ' -f1
+  else
+    md5 -q "$1"
+  fi
+}
+LOCAL_SUM="$(md5_of "target/$JAR_NAME")"
 REMOTE_SUM="$(rsh "md5sum '$ZLB_REMOTE_DIR/$REMOTE_REL/app.jar'" | cut -d' ' -f1)"
 [[ "$LOCAL_SUM" == "$REMOTE_SUM" ]] || die "传输校验失败（本地 $LOCAL_SUM / 远端 $REMOTE_SUM）"
 info "上传完成并校验一致 ($LOCAL_SUM)"
@@ -201,7 +212,9 @@ rsh "set -e
   fi
 
   ${SUDO}systemctl restart '$ZLB_SERVICE'"
-info "已切到 $REMOTE_REL，服务重启中"
+# 变量后面紧跟中文标点必须用 ${VAR} 包起来：bash 会把全角字符当成变量名的一部分，
+# set -u 下直接报 "REMOTE_REL，: unbound variable"（踩过一次，切软链后才炸，最难查）。
+info "已切到 ${REMOTE_REL}，服务重启中"
 
 # ---------- 健康检查 ----------
 step "4/5 健康检查"

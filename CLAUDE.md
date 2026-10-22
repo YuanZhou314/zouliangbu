@@ -16,12 +16,20 @@
 - 用户说「提交」才提交，且提交前先 `git log --oneline -5` + `git status` 核对（本仓库有并行会话）。
 - 打包同理：不发话不 `assembleDebug`（见下方验证纪律）。
 
-## 部署纪律（2026-10-21）
-线上服务器 `82.156.84.127`，**裸 jar + systemd** 跑在 `/opt/zouliangbu-server`，profile=prod + MySQL。
-- 发布只有一条路：`cd zouliangbu-server && ./deploy/release.sh`（或 `.\deploy\release.ps1`）。
+## 部署纪律（2026-10-22 校正）
+线上服务器 `82.156.84.127`，**裸 jar + systemd** 跑在 `/opt/zouliangbu-server`。
+**实际是 `SPRING_PROFILES_ACTIVE=dev` + SQLite 单文件**（`/opt/zouliangbu-server/zlb.db`，320K，
+已备份为 `backup-<时间戳>.db`）；`prod` profile 的 MySQL 配置只是备着，**线上没起 MySQL**。
+- 登录用 **ubuntu 用户 + `~/.ssh/id_ed25519`**（不是 root），且必须 `ZLB_USER=ubuntu`：
+  `ZLB_USER=ubuntu bash deploy/release.sh`（脚本默认 ZLB_USER=root，root 登录会被拒）。
+- 发布只有一条路：`cd zouliangbu-server && bash deploy/release.sh`（或 `.\deploy\release.ps1`）。
   它做 打包→scp→切软链→restart→健康检查，失败自动回滚。
 - **脚本不碰 git。** 部署与提交是两件事，提交仍需用户明确指令。
-- **禁止改已发布的 Flyway 脚本**（V1–V4 线上已跑），改表只能新增 `V5__*.sql`。
+- **macOS 上跑 bash 版脚本有两个已修过的坑**（2026-10-22 修复，别回退）：
+  ① 没有 `md5sum`（只有 `md5 -q`），脚本里用 `md5_of` 兼容；
+  ② `$VAR` 后面紧跟中文标点会被 bash 当成变量名的一部分（`REMOTE_REL，` → unbound variable），
+  必须写 `${VAR}，`。
+- **禁止改已发布的 Flyway 脚本**（V1–V8 线上已跑，含 `common/` 里的 V2/V5/V8），改表只能新增 V9+。
 - 服务器结构：`releases/<时间戳-sha>/app.jar` + `current` 软链 + `zlb.env`(chmod 600) + 上传目录。
   上传目录跨版本共享，发布不覆盖。
 - 细节见 `zouliangbu-server/deploy/README.md`。
@@ -103,7 +111,8 @@
 - 本轮前：45 用例（CoordTransform 6 / GpxWriter 9 / GpxParser 7 / GpxImport 9 / TrackMetrics 7 / TrackClock 7）。
 - 本轮新增：PolylineTest / ElevationTest / PaceTest / TrackSplitsTest 共 22 用例。
 - 2026-10-21 新增：SegmentMatchTest 7 用例（同路段匹配/对比）。
-- 当前：**71 用例全绿**（服务端另有 84 例）。改抽稀、爬升、配速、分段、路段匹配任一逻辑，
+- 2026-10-22 新增：`KmlParserRealLayoutTest` 3 用例（真实两步路 KML 布局，见上一节）。
+- 当前：**104 用例全绿**（服务端另有 84 例）。改抽稀、爬升、配速、分段、路段匹配任一逻辑，
   跑 testDebugUnitTest 保持全绿。
 
 ## 双轨地图架构（关键，本次会话产物）
@@ -143,6 +152,21 @@
 - 记录中从记录页返回：只 popBackStack，Service 不停；重进记录页浮层数据自动恢复
   （RecordingTrackState 是进程内单例）。
 
+## KML/GPX 导入（2026-10-22 用真实两步路文件实测后补的坑）
+
+格式嗅探看**根元素**（`TrackListViewModel.runImport` 读前 2048 字节找 `<kml`），不看扩展名——
+用户重命名过的文件也能导入。
+
+**两步路导出的 KML 有两个反直觉的地方**（`KmlParserRealLayoutTest` 守着）：
+
+1. **`<coordinates>` 要区分是在 `<LineString>` 里还是在 `<Point>` 里**。
+   同一文件里「标注点」文件夹用 `<Point><coordinates>` 放起终点标记；当成轨迹点收进来会
+   插到列表最前面，把后面所有点的时间配对整体错位（实测 1676 点里前 18 个 `timeMs` 变 null）。
+   判据是 `lineDepth > 0`，不是标签名。
+2. **`gx:Track` 里是「先全部 `gx:coord`，再全部 `<when>`」**，不是教科书上的 when/coord 交替。
+   按下标配对（`coord[i] ↔ when[i]`）对两种布局都成立，别改成「遇到 when 就绑定上一个 coord」。
+   单测之前只覆盖了交替布局，真实文件一测就炸。
+
 ## 不要踩的坑（来自本会话真实经验）
 1. **AMap 10.x 已内嵌 location 类**：不要单独加 `com.amap.api:location` 依赖，会
    `Duplicate class`。`app/build.gradle.kts` 只声明 `com.amap.api:3dmap`。
@@ -170,7 +194,13 @@
 ## 版本自增（构建产物）
 - `app/build.gradle.kts` 每次 `assemble` 读 `version.properties` 的 `buildNumber` 自增 +1，
   versionName = `0.1.0.${buildNumber}`（`0.1.0.000001`...），versionCode = `10000 + buildNumber`
-- `version.properties` 已 gitignore，每次打包自动 +1；改代码重打包时新版本号覆盖安装必通过
+- **`version.properties` 已入库（2026-10-22 改）**：Mac + Windows 两台机器共享同一个计数器。
+  之前它在 `.gitignore` 里，结果 Windows 端文件不存在、`getProperty` 走默认值 `"0"`，
+  每次都打 0.1.0.000001 / versionCode 10001，两台机器互相覆盖安装直接
+  `INSTALL_FAILED_VERSION_DOWNGRADE`。
+- **别再把它加回 `.gitignore`**——它不是构建产物，是计数器。
+- **残留风险**：两台机器交替打包时仍可能撞号（各自 +1 后没提交）。
+  真撞了就手动把 `buildNumber` 改成全局最大值再打包。
 - 坑：改完源码要确保重打包生效（CLAUDE.md 第 10 条），但**版本号机制保证每次 assemble 都是新包**
 
 ## 精度过滤（记录距离）

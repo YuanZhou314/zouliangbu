@@ -44,6 +44,11 @@ class FootprintApp : Application() {
         LocalGearRepository(database.gearItemDao())
     }
 
+    // 天气系统（第3项）：网络→Room缓存→离线降级，统一由 WeatherRepository 调度。
+    val weatherRepository: com.zouliangbu.footprint.weather.WeatherRepository by lazy {
+        com.zouliangbu.footprint.weather.WeatherRepository(database)
+    }
+
     override fun onCreate() {
         super.onCreate()
         // 恢复本地登录会话（token/uid/用户名，SharedPreferences）

@@ -37,4 +37,7 @@ object AppRoute {
 
     /** 拼编辑页路由；gearId = 0 表示新增。 */
     fun gearEdit(gearId: Long): String = "gear/edit?$ARG_GEAR_ID=$gearId"
+
+    // ===== 天气模块（外层全屏页）=====
+    const val WEATHER = "weather"
 }

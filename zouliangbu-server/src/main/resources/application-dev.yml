@@ -13,3 +13,11 @@ spring:
       connection-init-sql: PRAGMA busy_timeout = 5000
   flyway:
     locations: classpath:db/migration/sqlite,classpath:db/migration/common
+
+# 气象代理（天气系统第 2 项）：和风 Key 通过环境变量注入，默认留空回退纯 Open-Meteo。
+# 生产请用 QWEATHER_KEY 环境变量覆盖，不要把 Key 提交进仓库。
+zlb:
+  weather:
+    qweather-key: ${QWEATHER_KEY:82248aea8f5d4dfea275947410a26285}
+    cache-ttl-sec: 600
+    nowcast-cache-ttl-sec: 300

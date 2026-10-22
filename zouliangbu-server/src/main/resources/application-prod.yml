@@ -12,6 +12,13 @@ spring:
   flyway:
     locations: classpath:db/migration/mysql,classpath:db/migration/common
 
+# 气象代理：生产必须用 QWEATHER_KEY 环境变量提供，不给默认值。
+zlb:
+  weather:
+    qweather-key: ${QWEATHER_KEY:}
+    cache-ttl-sec: 600
+    nowcast-cache-ttl-sec: 300
+
 logging:
   level:
     root: INFO

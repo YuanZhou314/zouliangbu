@@ -74,9 +74,16 @@ fun AmapMapView(
     track: List<MapPoint> = emptyList(),
     showEndpoints: Boolean = false,
     autoZoom: Boolean = false,
+    fitKey: Any? = null,
+    fitPaddingDp: Int = 32,
+    /** 底部被悬浮卡片挡住的高度（dp），bbox 适配时要扣掉。 */
+    coveredBottomDp: Int = 0,
+    /** 用卫星图（轨迹回看更有地形感）。 */
+    satellite: Boolean = false,
     onEngineReady: ((MapEngine) -> Unit)? = null
 ) {
     val context = LocalContext.current
+    val density = androidx.compose.ui.platform.LocalDensity.current
     if (!AmapKey.isConfigured(context)) {
         MapKeyPlaceholder(modifier)
         return
@@ -86,7 +93,14 @@ fun AmapMapView(
     val mapView = remember { createMapView(context) }
     val provider = remember { (context.applicationContext as FootprintApp).locationProvider }
     // mapView 在 createMapView 里已经 onCreate 过，map 对象此刻可用。
-    val engine = remember(mapView) { AmapMapEngine(mapView.map) }
+    val engine = remember(mapView) {
+        AmapMapEngine(mapView.map) { mapView.width to mapView.height }
+    }
+
+    // 卫星图：回看轨迹时地形起伏比路网底图直观得多。
+    LaunchedEffect(engine, satellite) {
+        engine.setMapType(if (satellite) MapType.SATELLITE else MapType.NORMAL)
+    }
 
     // 引擎就绪回调：让上层（记录页）拿到 engine 引用做 setMapType / zoomIn 等受控操作。
     LaunchedEffect(engine) {
@@ -175,9 +189,13 @@ fun AmapMapView(
     }
 
     // 回看模式：轨迹首次到位后缩放到整条线（只依赖"有没有点"，避免每次加点都重置相机）。
-    LaunchedEffect(engine, autoZoom, track.isEmpty()) {
+    LaunchedEffect(engine, autoZoom, track.isEmpty(), fitKey, fitPaddingDp, coveredBottomDp) {
         if (autoZoom && track.isNotEmpty()) {
-            engine.zoomToTrack(track)
+            engine.zoomToTrack(
+                track,
+                with(density) { fitPaddingDp.dp.roundToPx() },
+                with(density) { coveredBottomDp.dp.roundToPx() }
+            )
         }
     }
 

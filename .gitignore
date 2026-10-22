@@ -1,7 +1,9 @@
 .gradle/
 build/
 local.properties
-version.properties
+# version.properties 是 buildNumber 计数器，**要入库**（两台机器共享，见 app/build.gradle.kts）。
+# 之前 ignore 掉导致 Windows 端每次都从 1 开始，versionCode 恒为 10001，
+# 与 Mac 端互相覆盖安装时直接 INSTALL_FAILED_VERSION_DOWNGRADE。
 # 本地工作记忆 / Agent 会话数据，不入库
 .workbuddy/
 *.iml
@@ -25,3 +27,6 @@ tmp
 
 # 临时 gradle home（构建缓存，不入库）
 .gradle-local-home/
+# 会话本机 gradle home（不入库）
+.gradle-home/
+version.properties

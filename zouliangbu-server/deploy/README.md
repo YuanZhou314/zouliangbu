@@ -123,5 +123,9 @@ ssh ubuntu@82.156.84.127 "systemctl status zouliangbu-server"        # 运行状
 ## 注意事项
 
 - **脚本不碰 git**。提交和推 GitHub 仍需明确指令后再做，两者相互独立。
-- **不要改已发布的 Flyway 脚本**。`V1~V4` 已在线上跑过，改动会导致 checksum 不匹配直接拒启。要改表就加 `V5__xxx.sql`。
-- 线上目前是 **prod + MySQL**。若那台机器没装 MySQL，把 `zlb.env` 里 profile 改成 `dev` 并设 `SQLITE_PATH`，SQLite 单文件同样能跑。
+- **不要改已发布的 Flyway 脚本**。线上已跑到 `V8`（V1~V8 全部成功，含 `common/` 里的 V2/V5/V8），
+  改动会导致 checksum 不匹配直接拒启。要改表就加 `V9__xxx.sql`。
+- **线上实际是 `dev` profile + SQLite 单文件**（`/opt/zouliangbu-server/zlb.db`），`prod` 的 MySQL 配置备而未用。
+  迁移目录跟着 profile 走：`dev` → `db/migration/sqlite`，`prod` → `db/migration/mysql`，数据脚本都在 `common/`。
+- **登录用户是 ubuntu，脚本默认 root**，必须显式覆盖：`ZLB_USER=ubuntu bash deploy/release.sh`。
+- **macOS 跑 bash 版**：已修 `md5sum`（用 `md5_of` 兼容）和 `$VAR` 紧跟中文标点（必须写 `${VAR}，`）两处坑。

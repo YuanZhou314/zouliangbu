@@ -23,6 +23,14 @@ fun MapViewWrapper(
     track: List<MapPoint> = emptyList(),
     showEndpoints: Boolean = false,
     autoZoom: Boolean = false,
+    /** 变化时重新做一次 bbox 适配（如底部卡片换档导致地图可视区变了）。 */
+    fitKey: Any? = null,
+    /** bbox 适配时四周留白（dp）。 */
+    fitPaddingDp: Int = 32,
+    /** 底部被悬浮卡片挡住的高度（dp）：适配时扣掉，把轨迹推到可见区中间。 */
+    coveredBottomDp: Int = 0,
+    /** 卫星图（轨迹回看用）。 */
+    satellite: Boolean = false,
     onEngineReady: ((MapEngine) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -32,6 +40,10 @@ fun MapViewWrapper(
             track = track,
             showEndpoints = showEndpoints,
             autoZoom = autoZoom,
+            fitKey = fitKey,
+            fitPaddingDp = fitPaddingDp,
+            coveredBottomDp = coveredBottomDp,
+            satellite = satellite,
             onEngineReady = onEngineReady
         )
     } else {

@@ -61,6 +61,7 @@ fun ProfileScreen(
     onOpenTracks: () -> Unit,
     onOpenOffline: () -> Unit = {},
     onOpenLogin: () -> Unit = {},
+    onOpenWeather: () -> Unit = {},
     vm: ProfileViewModel = viewModel()
 ) {
     val stats by vm.stats.collectAsStateWithLifecycle()
@@ -241,6 +242,7 @@ fun ProfileScreen(
                     EntryCell(Icons.Filled.Map, "轨迹", null, onClick = onOpenTracks)
                     EntryCell(Icons.Filled.Download, "离线地图", null, onClick = onOpenOffline)
                     EntryCell(Icons.Filled.Interests, "兴趣点", "开发中")
+                    EntryCell(Icons.Filled.Map, "景观天气", null, onClick = onOpenWeather)
                     EntryCell(Icons.Filled.CloudOff, "云端照片", "开发中")
                     EntryCell(Icons.Filled.Person, "帖子", "开发中")
                 }

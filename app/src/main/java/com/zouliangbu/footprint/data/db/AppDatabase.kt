@@ -19,8 +19,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * 没有它，改表时只能靠 `fallbackToDestructiveMigration` 清库——用户的轨迹会全丢。
  */
 @Database(
-    entities = [TrackSession::class, TrackPoint::class, GearItem::class],
-    version = 5,
+    entities = [TrackSession::class, TrackPoint::class, GearItem::class, WeatherCacheEntity::class],
+    version = 6,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +28,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sessionDao(): TrackSessionDao
     abstract fun pointDao(): TrackPointDao
     abstract fun gearItemDao(): GearItemDao
+    abstract fun weatherCacheDao(): WeatherCacheDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -91,12 +92,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        /** v6（天气系统第3项）：天气缓存表 */
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `weather_cache` (" +
+                            "`bucketKey` TEXT NOT NULL, " +
+                            "`lat` REAL NOT NULL, " +
+                            "`lng` REAL NOT NULL, " +
+                            "`forecastJson` TEXT NOT NULL, " +
+                            "`cachedAt` INTEGER NOT NULL, " +
+                            "PRIMARY KEY(`bucketKey`))"
+                )
+            }
+        }
+
         /**
          * 迁移清单。Room 会从当前库版本逐级跑，缺一条就在启动时抛
          * `IllegalStateException: Room cannot verify the data integrity`。
          */
         private val MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {

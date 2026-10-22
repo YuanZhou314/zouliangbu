@@ -27,7 +27,7 @@ interface MapEngine {
     fun setEndpoints(start: MapPoint?, end: MapPoint?)
 
     /** 把相机缩放到刚好容纳整条轨迹。 */
-    fun zoomToTrack(points: List<MapPoint>, paddingPx: Int = 96)
+    fun zoomToTrack(points: List<MapPoint>, paddingPx: Int = 96, coveredBottomPx: Int = 0)
 
     /** 移动相机到指定点。 */
     fun moveTo(point: MapPoint, zoom: Float = 16f, animate: Boolean = true)

@@ -41,7 +41,8 @@ fun MainTabsScreen(
     onOpenTrackDetail: (Long) -> Unit,
     onOpenGearEdit: (Long) -> Unit = {},
     onOpenGearStats: () -> Unit = {},
-    onOpenGearPacking: () -> Unit = {}
+    onOpenGearPacking: () -> Unit = {},
+    onOpenWeather: () -> Unit = {}
 ) {
     // 只关心"是否在记录"：RecordingTrackState 每 2 秒发一次 Snapshot，
     // 必须 map + distinctUntilChanged，否则整个主框架（含当前 tab 页）跟着每 2 秒重组。
@@ -88,7 +89,8 @@ fun MainTabsScreen(
                 ProfileScreen(
                     onOpenTracks = { tabNav.navigate(AppRoute.TRACKS) },
                     onOpenOffline = { tabNav.navigate(AppRoute.OFFLINE) },
-                    onOpenLogin = { tabNav.navigate(AppRoute.LOGIN) }
+                    onOpenLogin = { tabNav.navigate(AppRoute.LOGIN) },
+                    onOpenWeather = onOpenWeather
                 )
             }
             // 登录 / 注册（2026-10-21）：内层 destination，保留底栏，登录成功即返回。

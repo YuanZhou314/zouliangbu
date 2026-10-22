@@ -52,6 +52,9 @@ fun AppRoot() {
                 },
                 onOpenGearPacking = {
                     rootNav.navigate(AppRoute.GEAR_PACKING) { launchSingleTop = true }
+                },
+                onOpenWeather = {
+                    rootNav.navigate(AppRoute.WEATHER) { launchSingleTop = true }
                 }
             )
         }
@@ -88,6 +91,12 @@ fun AppRoot() {
         }
         composable(AppRoute.GEAR_PACKING) {
             GearPackingScreen(onBack = { rootNav.popBackStack() })
+        }
+        // ===== 天气模块（外层全屏页）=====
+        composable(AppRoute.WEATHER) {
+            com.zouliangbu.footprint.ui.weather.WeatherScreen(
+                onBack = { rootNav.popBackStack() }
+            )
         }
     }
 }

@@ -9,6 +9,139 @@
 
 ---
 
+## [2026-10-22] 服务端发布到线上（V7 社区共维护上线）
+
+- **发布**：`bash deploy/release.sh`（默认用户已改成 ubuntu）。线上切到 `20261022-151907-6c07651-dirty`，
+  健康检查通过，Flyway 跑到 **V8**。
+- **数据库**：线上其实是 **dev profile + SQLite**（`/opt/zouliangbu-server/zlb.db`），不是原来文档写的 prod+MySQL；
+  发布前已备份 `backup-20261022-211735.db`。CLAUDE.md / deploy/README 已校正。
+- **修了两个 bash 脚本的 mac 兼容 bug**（都是中途失败、最难查的那种）：
+  1. macOS 没有 `md5sum`（只有 `md5 -q`）→ 加 `md5_of()`；失败点在上传后、切软链前。
+  2. `$REMOTE_REL，` 后跟中文标点被 bash 当成变量名的一部分，`set -u` 下报 `unbound variable`；
+     失败点在**切软链并重启之后**（服务已经起来了，脚本却崩了，健康检查没跑）。改成 `${VAR}，`。
+- **线上 smoke test**（公网直连，模拟手机）：
+  - `POST /api/v1/proposals` UPLOAD（12 点）→ `PENDING`、`votesUp=1`（提案人自动一票）✓
+  - `GET /api/v1/proposals?status=PENDING` 可查 ✓
+  - admin 登录 → `GET /api/v1/admin/proposals` → `POST /{id}/reject` → PENDING 清空 ✓
+  - `/admin/proposals.html` 200 ✓、`/api/v1/routes/1` 已返回 `version` 字段 ✓
+- **数据现状**：`route_detail` 只有 3 行（13 条线路多数没有详情），对这些线路提勘误会报
+  「线路详情不存在」——不是 bug，是种子数据没详情；要给哪条提勘误得先补 detail。
+
+## [2026-10-22] 详情页沉浸式：卫星图 / 无标题栏 / 深色模式 / 圆角
+
+用户提的四条，逐条落：
+
+1. **圆角处发黑**：根因是根容器 `background(Color.Black)`。卡片顶部两个圆角缺口露的就是它。
+   改成 `MaterialTheme.colorScheme.surface`，浅色深色都不会再露黑边。
+2. **卫星图**：给 `MapViewWrapper` 加 `satellite`，地图建好后 `setMapType(SATELLITE)`。
+   **坑**：切卫星图会清空已添加的覆盖物，且清理是异步的 —— 紧接着重画也会被清。
+   对策：`setMapType` 后延迟 350ms 再 `reapply()`。
+   **连带坑**：原来的品牌绿线 `#2E7D32` 在深绿卫星图上等于隐身（截图里完全看不到线）。
+   改成亮黄 `#FFD400` + 40% 黑描边（底层多画一条 17px 宽的半透明黑线）。
+3. **深色模式**：卡片原来用 `Column + Modifier.background()`，只画了底色，
+   `LocalContentColor` 还是外层的黑色 → 深色模式下所有正文黑字压黑底。
+   改成 `Surface(color = surface)`，`Surface` 会提供 `contentColorFor(surface) = onSurface`，
+   所有 `Text` 不用逐个指定颜色就自动跟随主题。
+4. **沉浸式**：删掉标题栏，地图从状态栏顶上开始铺，左上/右上各一个 44dp 半透明圆按钮
+   （返回 / 更多）。标题只在卡片里出现，不再在顶端重复。
+
+**试过但放弃的方案**：地图铺满整屏 + 在引擎里用 `coveredBottomPx` 把 bbox 上移半个卡片高度。
+`moveCamera` 的相机状态是异步生效的：紧接着读 `cameraPosition` 拿到旧 zoom、读
+`projection.fromScreenLocation` 甚至返回 (0,0)，照着它再 moveCamera 会把地图扔到赤道。
+最终改成「地图高度 = 卡片顶边位置」，可视区即地图区，bbox 适配天然正确。
+（引擎里保留了 coveredBottom 分支，传 0 即不启用。）
+
+## [2026-10-22] 地图全览真正修好：高度算反 + 顶栏遮挡
+
+上一版「加了 reapply 补缩放」只解决了一半，用户仍然看到轨迹只有上半截。这次截图逐帧对比后找到两个真因：
+
+1. **地图高度算反**：`layout { h = screenPx - settledTop }` 得到的是**卡片自身高度**，
+   不是可视区高度。地图比可视区高出一倍，bbox 适配后轨迹中心落在卡片底下。
+   正解是 `h = settledTop`（卡片顶边位置就是地图底边）。
+2. **顶栏与地图重叠**：顶栏浮在地图上，fit 时要么留一大圈空白（轨迹被压得很小），
+   要么起终点 marker 被顶栏盖住。正解：地图放到顶栏**下面**（`padding(top = 状态栏+56dp)`），
+   两者不重叠，fit 留白只要 12dp 就够，轨迹能铺满可视区。
+
+顺带：顶栏从「黑色 22% 半透明」改成 surface 94%，图标文字转深色 —— 原来压在白色地图上是一条灰带。
+
+新增 `MapViewWrapper(fitPaddingDp)`，控制 bbox 适配留白；`AmapMapEngine` 加了 `TrackMap` 日志
+（applyZoom/reapply 时会打印目标 bbox 与相机位置），下次地图问题可以直接看 logcat 定位。
+
+## [2026-10-22] 图表加坐标轴 + 分段表格等宽
+
+- **分段表格四列改成等宽**：之前 `weight(0.85/1/1/0.8)` 让表头和数据行对不齐；
+  现在统一 `weight(1f)`，实测四列 228/228/229/229 px。
+- **曲线图补完整坐标轴**（`TrackChart`）：
+  - 左侧 Y 轴 3 个刻度（上/中/下，与横向网格对齐）；
+  - 底部 X 轴 5 个刻度（0 / 1/4 / 1/2 / 3/4 / 全长，末尾带 km）；
+  - Y 轴线加粗、5 条纵向网格 + 3 条横向网格；主曲线末端加圆点；平均线改虚线。
+  - 刻度文字用 Compose 布局画（不用 Canvas.drawText），字体跟主题一致，也不用换算 sp→px。
+- **数值摘要单独一行**：标题下面独立一行（如「平均 1.1 · 最高 9.6 km/h（虚线为平均值）」），
+  不再挤在标题右边。
+- 新增 `TrackDetailUi.minAltitude`（海拔图摘要要显示最低点）。
+- **Y 轴刻度槽收紧 + 左对齐（同日二次修）**：槽 44dp 变 30dp，标签从右对齐改左对齐。
+  原来数字右对齐贴着轴线，多出来的宽度全落在屏幕最左边（实测数字只占 43px、槽占 132px，
+  左侧 128px 空着），用户第一眼就看出是「留了一大片空白」。现在数字与标题同为 50px 左边界。
+- 配速刻度改用紧凑格式（总分钟:秒，如 98:10），否则 h:mm'ss 那种 7 字符写法放不进窄槽。
+
+## [2026-10-22] 详情页补图：地图定位 bug + 四张曲线 + 分段表格
+
+- **地图停在默认中心（北京）的根因**：`zoomToTrack` 在 `OnMapLoaded` 之前被调用，AMap 直接丢弃，
+  而 `reapply()` 只重放轨迹线和起终点、**不重放缩放**，那次请求永久丢失。
+  修法：`AmapMapEngine` 缓存 `pendingZoom/pendingPaddingPx`，`reapply()` 里补一次 `applyZoom()`。
+  验证方式：数截图里轨迹线颜色 `#2E7D32` 的像素，修复前 236 个（只有 marker），修复后 **4451 个**。
+- **地图视口改成只到卡片顶边**：原来地图铺满整屏、卡片盖住下面 2/3，`newLatLngBounds` 按整屏适配，
+  轨迹正好落在被盖住的部分。现在地图高度 = `屏高 - 卡片顶`（松手后才更新，拖拽中不改，避免 AMap 每帧重排），
+  并给 `MapViewWrapper` 加了 `fitKey`，换档后重新适配 bbox。
+- **新增四张曲线图**（`ui/tracks/TrackChart.kt`，手写 Canvas，不引图表库）：速度、配速、海拔、累计爬升+下降。
+  纵轴用 1%/99% 分位而不是极值，单个 GPS 尖峰不会把图压扁；面积用主题色到透明的渐变。
+- **新增 `util/TrackSeries`**：按**距离**切 100 m 桶生成序列（按点数切会让采样密的地方看起来更慢）。
+  距离规则复用 `TrackMetrics.countedSegment`，静止桶不出速度点，时间戳倒退直接跳过。
+- **分段改成表格**：公里/用时/配速/爬升四列、数字右对齐、隔行浅底色，替代原来一行串起来的写法。
+- 单测：**108 例全绿**（+4 `TrackSeriesTest`）。
+
+## [2026-10-22] 轨迹详情页重做：地图 1/3 + 可拖拽三档卡片
+
+按六只脚的布局重排详情页（截图见 `docs/shot-detail-*.png`）。
+
+- **地图**：铺满整屏做背景，默认档只露出上面约 1/3（`mediumTop = 屏高 * 0.35`）。
+- **详情卡三档**（拖顶部把手）：展开（56dp，地图只剩顶栏）/ 默认（1/3 地图）/ 收起（210dp）。
+  收起档**隐藏概览与六宫格**，只留「标题 + 大字号里程」——否则三行概览就把 210dp 吃光，
+  折叠后反而看不到关键数字。判定用 `derivedStateOf`，避免拖拽每帧重组整棵内容树。
+- **卡内顺序**（先概览后细节）：时间区间 → 轨迹点 → 起点坐标 → 标题 → 46sp 里程 + 难度 →
+  六宫格（总时间/最快速度/平均速度 · 最高海拔/累计爬升/累计下降）→ 配速 → 分段明细。
+- **右上角三点菜单**：分享行程卡 / 导出 GPX / 与上次对比 / 贡献到线路库。顶栏不再堆两个分享图标。
+- **底栏**只留两个社区动作（与上次对比、贡献到线路库）。
+- **难度是本地估算**：`difficultyOf(km, ascentM)`，8km+300m 以下算简单、20km+1200m 以下算中等。
+  六只脚那个「17km/1000m 标简单」是上传者手选的，我们没有人工难度字段，只能按经验分档。
+- **坑**：`Modifier.height(dp)` 每帧改会让整棵子树重组（18 段分段明显掉帧），
+  改用 `Modifier.layout` 只让测量阶段失效。
+- **坑**：`assembleDebug` 连跑几次都返回 BUILD SUCCESSFUL，但 APK 时间戳不变、装上去还是旧代码。
+  必须 `--rerun-tasks`（CLAUDE.md 第 10 条的老问题，这次是真踩到了）。
+
+新增 `TrackDetailUi.maxAltitude`（最高海拔，`raw.maxOfOrNull { it.altitude }`）。
+
+## [2026-10-22] KML 导入修 bug：标注点被当成轨迹点
+
+用真实的「赣南齐云山穿越轨迹」两步路 KML（229 KB / 1658 个 gx:coord / 3 个分段）实测，
+模拟器走完整条链路：我的 → 我的记录 → 导入 → SAF 选文件 → 详情页。
+
+- **Bug**：导入出 **1676 个点**（多 18 个），且**前 18 个点时间全为 null**。
+  根因：`<coordinates>` 只按标签名判断，把「标注点」文件夹里 `<Point><coordinates>` 的
+  起点/终点标记也收进了轨迹点列表，还插在**最前面**，把后面所有点的 when/coord 下标配对
+  整体错位 18 位。修复：`KmlParser` 增加 `lineDepth`，只有 `<LineString>` 内的 `<coordinates>`
+  才当轨迹几何。修复后 1658 点、时间零缺失。
+- **顺手发现**：两步路的 `gx:Track` 是「先全部 `gx:coord`，再全部 `<when>`」，
+  不是教科书里的 when/coord 交替。原按下标配对两种布局都对，但**单测只覆盖了交替布局**，
+  所以真实文件一测就炸。新增 `KmlParserRealLayoutTest` 3 例锁住真实布局。
+- **单测**：App 全量 **104 例全绿**（+3）。
+- **模拟器实测结果**（android-33 AVD `zouliangbu33`）：
+  17.74 km / 16:54:10 / 1658 点 / ↑1078 ↓1445 m / 分段正常。
+  DB 核对：session 3 的 1658 点与文件里的 gx:coord 数一致，时间戳首尾对得上。
+- **不是 bug**：导入的 session 表里 `ascentMeters=0`，但详情页显示 ↑1078 ——
+  这是 `TrackDetailViewModel` 的既定逻辑（存的值 >0 才用，否则从原始点重算），导入轨迹不落爬升。
+- **新 APK**：0.1.0.000024。
+
 ## [2026-10-22] 轨迹导入新增 KML 格式支持
 
 - 新增 `export/KmlParser.kt`：SAX + namespace aware + XXE 防护，复用 `GpxParser.ParsedTrack`
