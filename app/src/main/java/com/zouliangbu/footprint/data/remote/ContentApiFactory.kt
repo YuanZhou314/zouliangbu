@@ -1,10 +1,7 @@
 package com.zouliangbu.footprint.data.remote
 
-import com.zouliangbu.footprint.data.model.FeedDetail
-import com.zouliangbu.footprint.data.model.FeedItem
 import com.zouliangbu.footprint.data.model.GearCategory
 import com.zouliangbu.footprint.data.model.RouteCatalog
-import com.zouliangbu.footprint.data.repo.FeedRepository
 import com.zouliangbu.footprint.data.repo.GearRepository
 import com.zouliangbu.footprint.data.repo.RouteRepository
 import kotlinx.coroutines.Dispatchers
@@ -22,10 +19,12 @@ import java.util.concurrent.TimeUnit
 /**
  * Retrofit + kotlinx-serialization 的 HTTP 客户端（ROADMAP P6 S4）。
  *
- * 与服务端 ContentController 的三个接口一一对应：
- *   - GET /api/v1/feed
+ * 与服务端 ContentController 的接口对应：
  *   - GET /api/v1/routes
  *   - GET /api/v1/gear/categories
+ *
+ * 注：`/api/v1/feed`（首页同城动态）已从 App 与 Server 双侧移除 ——
+ * 首页改为纯本地的轨迹时间轴，不再依赖任何网络内容。
  *
  * 设计要点：
  *   1. **kotlinx-serialization 而不是 Gson**——Kotlin 官方、编译期校验。
@@ -60,12 +59,6 @@ object ContentApiFactory {
 
 /** Retrofit service 接口。 */
 interface ContentService {
-    @GET("api/v1/feed")
-    suspend fun feed(): ApiResponse<FeedPage>
-
-    @GET("api/v1/feed/{id}")
-    suspend fun getFeedDetail(@retrofit2.http.Path("id") id: String): ApiResponse<FeedDetail>
-
     @GET("api/v1/routes")
     suspend fun routes(): ApiResponse<RouteCatalog>
 
@@ -87,16 +80,6 @@ interface ContentService {
     @GET("api/v1/routes/{id}/markers")
     suspend fun getMarkers(@retrofit2.http.Path("id") id: Long): ApiResponse<List<MarkerDto>>
 }
-
-/**
- * 服务端 /feed 的分页响应体：items + nextCursor（cursor 分页）。
- * 字段名与服务端 ContentDtos.FeedPage 一致。
- */
-@kotlinx.serialization.Serializable
-data class FeedPage(
-    val items: List<FeedItem> = emptyList(),
-    val nextCursor: String? = null
-)
 
 /**
  * 服务端统一响应体 `{code, msg, data}`。
@@ -181,24 +164,6 @@ data class MarkerDto(
     val altitude: Double? = null,
     val time: Long? = null
 )
-
-/**
- * RemoteFeedRepository：只走线上（用户要求：假数据全部清空，没有就不展示）。
- * 网络失败/为空 → 空列表，UI 显示空态；[fallback] 参数仅为兼容旧装配签名保留，不再使用。
- */
-class RemoteFeedRepository(
-    @Suppress("unused") private val fallback: FeedRepository
-) : FeedRepository {
-    override fun observeFeed(): Flow<List<FeedItem>> = flow {
-        val page = runCatching { ContentApiFactory.service.feed().data }.getOrNull()
-        if (page != null && page.items.isNotEmpty()) {
-            ContentSourceState.onNetworkSuccess()
-        } else {
-            ContentSourceState.onOfflineFallback()
-        }
-        emit(page?.items ?: emptyList())
-    }.flowOn(Dispatchers.IO)
-}
 
 /** RemoteRouteRepository：同上，只走线上，失败给空目录。 */
 class RemoteRouteRepository(

@@ -34,7 +34,6 @@ java -jar target/zouliangbu-server-0.1.0.jar --server.port=8080
 
 ```bash
 curl http://127.0.0.1:8080/api/v1/healthz
-curl "http://127.0.0.1:8080/api/v1/feed?size=3"
 curl "http://127.0.0.1:8080/api/v1/routes?keyword=武功"
 curl "http://127.0.0.1:8080/api/v1/gear/categories"
 ```
@@ -55,7 +54,6 @@ MySQL 与 api 同 compose 内网，3306 **不对外暴露**。正式对外请在
 
 | 方法 | 路径 | 参数 | 说明 |
 |---|---|---|---|
-| GET | `/api/v1/feed` | `city`、`cursor`、`size`(1–50，默认 20) | 首页同城动态，cursor 分页 |
 | GET | `/api/v1/routes` | `keyword`、`city` | 线路目录（推荐位 + 分组）；有关键词时隐藏推荐位 |
 | GET | `/api/v1/gear/categories` | — | 装备分类（静态，可长缓存） |
 | GET | `/api/v1/healthz` | — | 存活检查 |
@@ -96,17 +94,19 @@ MySQL 与 api 同 compose 内网，3306 **不对外暴露**。正式对外请在
 }
 ```
 
-字段名与 App 侧 `data/model/FeedItem.kt`、`RouteItem.kt`、`GearCategory.kt` **完全一致**，
+字段名与 App 侧 `data/model/RouteItem.kt`、`GearCategory.kt` **完全一致**，
 App 接网络时只需加反序列化，不改 UI / ViewModel。
 
 ## 四、表结构
 
 ```
-feed_post      动态（title/author/like_count/city/cover_url/cover_aspect_ratio/status）
 route_section  线路分组（title/subtitle/sort_weight）
 route          线路（name/region/distance_km/ascent_meters/tags 逗号分隔/section_id/is_recommend）
 gear_category  装备分类（code=g1..g8 与 App 图标映射键一致）
 ```
+
+> `feed_post`（首页动态）已于 V8 下线：App 首页改为纯本地轨迹时间轴，
+> 该模块内容必须依赖服务端、断网即空，与产品定位冲突。
 
 改表流程：新增 `src/main/resources/db/migration/V3__xxx.sql` → 重启自动执行。**不要改已执行的 V1/V2**。
 

@@ -25,10 +25,6 @@ object AppRoute {
     const val ARG_SESSION_ID = "sessionId"
     const val TRACK_DETAIL = "track/{$ARG_SESSION_ID}"
 
-    /** 动态详情（问题 5）：feedId 为 String（服务端 feed id 与 route 的 Long 不同）。 */
-    const val ARG_FEED_ID = "feedId"
-    const val FEED_DETAIL = "feed/{$ARG_FEED_ID}"
-
     /** 拼一条详情页的实际路由。 */
     fun trackDetail(sessionId: Long): String = "track/$sessionId"
 

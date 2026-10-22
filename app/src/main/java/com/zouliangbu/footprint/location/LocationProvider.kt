@@ -9,14 +9,17 @@ import com.amap.api.location.AMapLocationClientOption
 import com.amap.api.location.AMapLocationListener
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.shareIn
+import kotlinx.coroutines.launch
 
 /**
  * AMap 高精度定位的共享 Flow 封装（GCJ-02 输出）。
@@ -51,16 +54,49 @@ class LocationProvider(context: Context) {
     var lastLocation: AMapLocation? = null
         private set
 
-    /** 共享定位流：地图蓝点 + 记录 Service 共用同一个上游 AMapLocationClient。 */
+    /**
+     * 共享定位流：地图蓝点 + 记录 Service + 城市名共用同一个上游 AMapLocationClient。
+     *
+     * started = Eagerly：App 一启动就开始定位（用户明确要求「打开 App 就自动定位」）。
+     * 之前是 WhileSubscribed(5s)，没有界面订阅时上游根本不启动 → 「给了权限也不定位」。
+     * 全 App 只有一个 client，常驻运行不会额外增加功耗（本来就 2s 一次）。
+     */
     val location: SharedFlow<AMapLocation> by lazy {
         locationUpdatesInternal()
-            .onEach { lastLocation = it }
+            .onEach { loc ->
+                lastLocation = loc
+                if (!firstFixLogged) {
+                    firstFixLogged = true
+                    Log.i(
+                        "LocationProvider",
+                        "first fix: ${loc.latitude},${loc.longitude} city=${loc.city}"
+                    )
+                }
+            }
             .shareIn(
                 scope = scope,
-                started = SharingStarted.WhileSubscribed(5_000),
+                started = SharingStarted.Eagerly,
                 replay = 1 // 新订阅者（地图 activate）立即拿到最近一次定位
             )
     }
+
+    /**
+     * 预热定位（App 启动 / 授权成功后调用）：触碰一次 location 让 lazy 求值，
+     * Eagerly 即开始定位；常驻订阅保证 lastLocation 持续更新（自绘定位按钮要用）。
+     * 幂等。
+     */
+    fun start() {
+        if (warmStarted) return
+        warmStarted = true
+        warmJob = scope.launch {
+            runCatching { location.collect { } }
+        }
+        Log.i("LocationProvider", "start() -> location flow running")
+    }
+
+    @Volatile private var warmStarted = false
+    @Volatile private var firstFixLogged = false
+    private var warmJob: Job? = null
 
     @SuppressLint("MissingPermission")
     private fun locationUpdatesInternal(): Flow<AMapLocation> = callbackFlow {

@@ -28,9 +28,6 @@ Shell.mount({
     if (d.submissionPending > 0) {
       alerts.push('<span class="badge warn">' + d.submissionPending + ' 条路线待审批</span>');
     }
-    if (d.feedNoCover > 0) {
-      alerts.push('<span class="badge warn">' + d.feedNoCover + ' 条动态缺封面</span>');
-    }
     if (!alerts.length) {
       alerts.push('<span class="badge on">没有待处理事项</span>');
     }
@@ -44,10 +41,6 @@ Shell.mount({
       <div class="card">
         <h2>内容存量</h2>
         <div class="stats">
-          <div class="stat"><div class="v">${d.feedOnline}</div><div class="k">首页动态（上线）</div></div>
-          <div class="stat"><div class="v">${d.feedOffline}</div><div class="k">首页动态（下线）</div></div>
-          <div class="stat"><div class="v ${d.feedNoCover > 0 ? 'warn' : ''}">${d.feedNoCover}</div>
-            <div class="k">缺封面（上线中）</div></div>
           <div class="stat"><div class="v">${d.routeOnline}</div><div class="k">线路（上线）</div></div>
           <div class="stat"><div class="v">${d.routeRecommend}</div><div class="k">推荐位线路</div></div>
           <div class="stat"><div class="v">${d.routeOffline}</div><div class="k">线路（已下架）</div></div>

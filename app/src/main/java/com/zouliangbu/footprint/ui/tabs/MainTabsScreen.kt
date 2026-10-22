@@ -15,7 +15,6 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import com.zouliangbu.footprint.data.RecordingTrackState
 import com.zouliangbu.footprint.ui.auth.LoginScreen
 import com.zouliangbu.footprint.ui.components.AppBottomBar
-import com.zouliangbu.footprint.ui.feed.FeedDetailScreen
 import com.zouliangbu.footprint.ui.gear.GearScreen
 import com.zouliangbu.footprint.ui.home.HomeScreen
 import com.zouliangbu.footprint.ui.navigation.AppRoute
@@ -70,7 +69,11 @@ fun MainTabsScreen(
             modifier = Modifier.padding(inner)
         ) {
             composable(AppRoute.HOME) {
-                HomeScreen(onOpenDetail = { feedId -> tabNav.navigate("feed/$feedId") })
+                // 首页 = 本地轨迹时间轴：点卡片直接进轨迹详情（外层全屏页）
+                HomeScreen(
+                    onOpenDetail = { sessionId -> onOpenTrackDetail(sessionId) },
+                    onOpenRecord = onOpenRecord
+                )
             }
             composable(AppRoute.ROUTES) { RoutesScreen(onOpenDetail = { tabNav.navigate("route/$it") }) }
             composable(AppRoute.GEAR) {
@@ -118,11 +121,6 @@ fun MainTabsScreen(
             composable("routeTrack/{routeId}") { entry ->
                 val id = entry.arguments?.getString("routeId")?.toLongOrNull() ?: 0L
                 TrackPreviewScreen(routeId = id, onBack = { tabNav.popBackStack() })
-            }
-            // 动态详情（问题 5）：feedId 是 String，不能 toLong
-            composable(AppRoute.FEED_DETAIL) { entry ->
-                val id = entry.arguments?.getString(AppRoute.ARG_FEED_ID) ?: ""
-                FeedDetailScreen(feedId = id, onBack = { tabNav.popBackStack() })
             }
         }
     }

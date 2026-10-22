@@ -9,6 +9,7 @@ import com.zouliangbu.footprint.data.db.TrackPoint
 import com.zouliangbu.footprint.data.db.TrackSummary
 import com.zouliangbu.footprint.export.GpxImport
 import com.zouliangbu.footprint.export.GpxParser
+import com.zouliangbu.footprint.export.KmlParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -83,7 +84,7 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
     val importing: StateFlow<Boolean> = _importing.asStateFlow()
 
     /**
-     * 从 SAF 拿到的 Uri 导入一条 GPX。
+     * 从 SAF 拿到的 Uri 导入一条轨迹文件（GPX / KML，按文件头自动分流）。
      *
      * 全流程放 IO 线程：解析 + 几千点入库，主线程做会 ANR。
      * 失败原因一律转成人话（[ImportOutcome.Failure]），不把异常对象抛给 UI。
@@ -101,11 +102,18 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun runImport(uri: Uri): ImportOutcome {
         val parsed = try {
             val resolver = getApplication<Application>().contentResolver
-            resolver.openInputStream(uri)?.use { GpxParser.parse(it) }
-                ?: return ImportOutcome.Failure("打不开这个文件（可能已被移走或没有读取权限）")
+            resolver.openInputStream(uri)?.use { input ->
+                // 格式嗅探：读整个文件（轨迹文件几 MB 以内），按根元素分流到对应解析器。
+                // 不信扩展名——用户重命名过的文件也能正确导入。
+                val bytes = input.readBytes()
+                val head = String(bytes, 0, minOf(bytes.size, 2048), Charsets.UTF_8)
+                val stream = bytes.inputStream()
+                if (head.contains("<kml", ignoreCase = true)) KmlParser.parse(stream)
+                else GpxParser.parse(stream)
+            } ?: return ImportOutcome.Failure("打不开这个文件（可能已被移走或没有读取权限）")
         } catch (e: IllegalArgumentException) {
-            // GpxParser 对 XML 错误抛的就是这个，消息已带行号
-            return ImportOutcome.Failure(e.message ?: "GPX 解析失败")
+            // GpxParser/KmlParser 对 XML 错误抛的就是这个，消息已带行号
+            return ImportOutcome.Failure(e.message ?: "轨迹文件解析失败")
         } catch (e: Exception) {
             return ImportOutcome.Failure("读取失败：${e.message ?: e.javaClass.simpleName}")
         }
@@ -113,7 +121,7 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
         // 转换 + 距离累计全在 GpxImport 里（纯 Kotlin，有单测覆盖）：
         // 时间兜底、海拔兜底、1 秒间隔编造这些容易算错的细节不散在 ViewModel 里。
         val payload = GpxImport.toPayload(parsed, System.currentTimeMillis())
-            ?: return ImportOutcome.Failure("文件里没有轨迹点（只支持 <trk>/<trkseg>/<trkpt> 结构）")
+            ?: return ImportOutcome.Failure("文件里没有轨迹点（支持 GPX <trkpt> 与 KML gx:Track / LineString）")
 
         return try {
             val id = repo.importTrack(

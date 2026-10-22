@@ -2,18 +2,13 @@ package com.zouliangbu.server.content;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.zouliangbu.server.common.ApiResponse;
-import com.zouliangbu.server.content.dto.ContentDtos.FeedDetail;
-import com.zouliangbu.server.content.dto.ContentDtos.FeedItem;
-import com.zouliangbu.server.content.dto.ContentDtos.FeedPage;
 import com.zouliangbu.server.content.dto.ContentDtos.GearCategory;
 import com.zouliangbu.server.content.dto.ContentDtos.RouteCatalog;
 import com.zouliangbu.server.content.dto.ContentDtos.RouteItem;
 import com.zouliangbu.server.content.dto.ContentDtos.RouteSection;
-import com.zouliangbu.server.content.entity.FeedPost;
 import com.zouliangbu.server.content.entity.GearCategoryEntity;
 import com.zouliangbu.server.content.entity.RouteEntity;
 import com.zouliangbu.server.content.entity.RouteSectionEntity;
-import com.zouliangbu.server.content.mapper.FeedPostMapper;
 import com.zouliangbu.server.content.mapper.GearCategoryMapper;
 import com.zouliangbu.server.content.mapper.RouteMapper;
 import com.zouliangbu.server.content.mapper.RouteSectionMapper;
@@ -34,75 +29,16 @@ import java.util.Map;
 @Service
 public class ContentQueryService {
 
-    private final FeedPostMapper feedPostMapper;
     private final RouteMapper routeMapper;
     private final RouteSectionMapper routeSectionMapper;
     private final GearCategoryMapper gearCategoryMapper;
 
-    public ContentQueryService(FeedPostMapper feedPostMapper,
-                               RouteMapper routeMapper,
+    public ContentQueryService(RouteMapper routeMapper,
                                RouteSectionMapper routeSectionMapper,
                                GearCategoryMapper gearCategoryMapper) {
-        this.feedPostMapper = feedPostMapper;
         this.routeMapper = routeMapper;
         this.routeSectionMapper = routeSectionMapper;
         this.gearCategoryMapper = gearCategoryMapper;
-    }
-
-    /** 首页同城动态：city 为空则返回全部城市。 */
-    public FeedPage feed(String city, String cursor, int size) {
-        int limit = Math.min(Math.max(size, 1), 50);   // 防御：客户端传超大值
-
-        LambdaQueryWrapper<FeedPost> qw = new LambdaQueryWrapper<FeedPost>()
-                .eq(FeedPost::getStatus, 1);
-
-        if (city != null && !city.isBlank()) {
-            qw.eq(FeedPost::getCity, city.trim());
-        }
-        Long cursorId = ApiResponse.Cursor.decode(cursor);
-        if (cursorId != null) {
-            qw.lt(FeedPost::getId, cursorId);
-        }
-        qw.orderByDesc(FeedPost::getId).last("LIMIT " + (limit + 1));
-
-        List<FeedPost> rows = feedPostMapper.selectList(qw);
-        boolean hasMore = rows.size() > limit;
-        if (hasMore) {
-            rows = rows.subList(0, limit);
-        }
-
-        List<FeedItem> items = rows.stream().map(this::toFeedItem).toList();
-        String next = hasMore && !rows.isEmpty()
-                ? ApiResponse.Cursor.encode(rows.get(rows.size() - 1).getId())
-                : null;
-        return new FeedPage(items, next);
-    }
-
-    /**
-     * 动态详情：不存在或未上线返回 null（Controller 转 404）。
-     * content 保证非 null（空串），其余必填字段与列表口径一致。
-     */
-    public FeedDetail feedDetail(long id) {
-        FeedPost p = feedPostMapper.selectById(id);
-        if (p == null || p.getStatus() == null || p.getStatus() != 1) {
-            return null;
-        }
-        float ratio = p.getCoverAspectRatio() == null ? 1f : p.getCoverAspectRatio().floatValue();
-        int coverStyle = p.getId() == null ? 0 : (int) (p.getId() % 5);
-        return new FeedDetail(
-                String.valueOf(p.getId()),
-                // title/author/city 与 likeCount 同样兜底：后台若绕过校验写进 null，
-                // App 侧无默认值字段会直接抛 MissingFieldException，整页白屏。
-                p.getTitle() == null ? "" : p.getTitle(),
-                p.getAuthor() == null ? "" : p.getAuthor(),
-                p.getLikeCount() == null ? 0 : p.getLikeCount(),
-                p.getCity() == null ? "" : p.getCity(),
-                coverStyle,
-                p.getCoverUrl(),
-                ratio,
-                p.getCoverAuthor(),
-                p.getContent() == null ? "" : p.getContent(),
-                p.getCreatedAt() == null ? null : p.getCreatedAt().toString());
     }
 
     /** 线路目录：横向推荐位 + 分组；keyword 过滤名称/地区，命中后只保留非空分组。 */
@@ -196,21 +132,6 @@ public class ContentQueryService {
     /** 空值安全的忽略大小写包含判断（与 App 端 contains(kw, ignoreCase = true) 对齐）。 */
     private static boolean containsIgnoreNull(String source, String keyword) {
         return source != null && source.toLowerCase().contains(keyword.toLowerCase());
-    }
-
-    private FeedItem toFeedItem(FeedPost p) {
-        float ratio = p.getCoverAspectRatio() == null ? 1f : p.getCoverAspectRatio().floatValue();
-        // coverStyle：无真实封面图时，用 id 取模让客户端选择渐变色板（与 toRouteItem 保持一致）
-        int coverStyle = p.getId() == null ? 0 : (int) (p.getId() % 5);
-        return new FeedItem(
-                String.valueOf(p.getId()),
-                p.getTitle(),
-                p.getAuthor(),
-                p.getLikeCount() == null ? 0 : p.getLikeCount(),
-                p.getCity(),
-                coverStyle,
-                p.getCoverUrl(),
-                ratio);
     }
 
     private RouteItem toRouteItem(RouteEntity r) {

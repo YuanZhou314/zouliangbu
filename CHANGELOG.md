@@ -9,6 +9,53 @@
 
 ---
 
+## [2026-10-22] 轨迹导入新增 KML 格式支持
+
+- 新增 `export/KmlParser.kt`：SAX + namespace aware + XXE 防护，复用 `GpxParser.ParsedTrack`
+  与 `GpxImport.toPayload`（时间兜底 / 距离累计零改动）。
+  - 支持两种写法：`gx:Track`（when[i] ↔ coord[i] 按下标配对，缺时间记 null）与
+    `LineString/coordinates`（"lng,lat[,alt]"）。
+  - KML 坐标是 **lng lat alt 顺序**（和 GPX 相反），WGS-84，解析边界转 GCJ-02。
+  - 兼容无命名空间的 KML（localName 为空时靠 qName 剥 `gx:` 前缀）。
+- `TrackListViewModel.runImport`：读文件头 2KB 嗅探 `<kml` 分流 KmlParser/GpxParser，
+  **不信扩展名**（重命名过的文件也能导）。
+- 文案改「导入 GPX / KML」（`TrackListScreen` 空态 + 顶栏）。
+- 坑：SAX 测试样例里用 `gx:` 前缀**必须声明 `xmlns:gx="http://www.google.com/kml/ext/2.2"`**，
+  否则 XML 格式错误（parser 没开外部 DTD 也一样）。
+- 验证：单测 101/101 绿（新增 `KmlParserTest` 7 条）；真实两步路样例
+  （赣南齐云山 1676 点）JVM 冒烟解析通过，名称/点数/海拔正确。
+
+---
+
+## [2026-10-22] 首页改本地轨迹时间轴，首页动态模块整体下线
+
+**决策**：App 定位＝本地优先工具为主体 + 可选在线层，**唯一红线是不做广告**。
+动态信息流必须依赖服务端、断网即空，与「户外默认没信号」前提冲突，且 `docs/product-philosophy.md`
+本就写着「社交 0 投入」——代码与哲学打架，以哲学为准。
+
+**App**（`compileDebugKotlin` 通过，单测 94/94 绿，删了 2 个 feed 序列化用例）：
+- 首页 `HomeScreen` 重写：城市栏 + 本月汇总（`TrackSummaryCard`）+ 按月分组的轨迹卡片，数据全走
+  `TrackRepository.observeCompleted()`，**零网络请求**；空态引导「去记录」。
+- 轨迹展示组件从 `ui/tracks/TrackListScreen`（全是 private）提到 `ui/components/TrackCards.kt`：
+  `TrackCard` / `TrackThumb` / `MonthHeader` / `TrackSummaryCard` / `MonthCell` 等，两处共用。
+- 删除：`ui/feed/`（2 文件）、`HomeViewModel`（并入 HomeScreen）、`FeedRepository` / `MockFeedRepository` /
+  `FeedItem` / `FeedDetail`、`AppRoute.FEED_DETAIL`、`ContentApiFactory` 的 3 个 feed 端点、`MockData.feed`。
+- 顶部运营 Banner 一并删除（硬编码占位、无接口、无跳转）。
+
+**服务端**（`mvn test` 69/69 绿）：
+- 新增 `common/V8__drop_feed.sql`（`DROP TABLE feed_post`）。V1/V2/V4/V5 已在线执行，**不改**。
+- 删 `FeedPost` / `FeedPostMapper` / `AdminFeedController` / `admin/feed.html`；
+  `ContentDtos` 的 3 个 Feed record、`ContentQueryService.feed/feedDetail`、`ContentController` 两个端点、
+  `AdminDashboardController` 的 4 个 feed 计数字段（含 `dashboard.html` 对应卡片）全部移除。
+
+**注意**：
+- `feed_post` 无外键、无其他表引用，删除是零依赖操作；审计表里的 `feed.*` 历史记录按「审计不删」保留。
+- `OfflineDemoBanner` / `CoverPlaceholder` / `ContentSourceState` / `ContentApiFactory` 都不是孤儿
+  （线路页与 Auth/Proposal 在用），保留。
+- 首页 banner 删除后 `OfflineDemoBanner` 不再出现在首页，只剩线路页在用。
+
+---
+
 ## [2026-10-21] 社区共维护提案机制 + 同路段对比
 
 **产品口径**（`docs/product-philosophy.md`）：记录私有、线路公共、社交不做。

@@ -6,14 +6,11 @@ import com.amap.api.location.AMapLocationClient
 import com.amap.api.maps.MapsInitializer
 import com.zouliangbu.footprint.data.SessionRecovery
 import com.zouliangbu.footprint.data.db.AppDatabase
-import com.zouliangbu.footprint.data.mock.MockFeedRepository
 import com.zouliangbu.footprint.data.mock.MockRouteRepository
-import com.zouliangbu.footprint.data.repo.FeedRepository
 import com.zouliangbu.footprint.data.repo.GearRepository
 import com.zouliangbu.footprint.data.repo.LocalGearRepository
 import com.zouliangbu.footprint.data.repo.RouteRepository
 import com.zouliangbu.footprint.data.repo.TrackRepository
-import com.zouliangbu.footprint.data.remote.RemoteFeedRepository
 import com.zouliangbu.footprint.data.remote.RemoteRouteRepository
 import com.zouliangbu.footprint.location.CityProvider
 import com.zouliangbu.footprint.location.LocationProvider
@@ -40,7 +37,7 @@ class FootprintApp : Application() {
     // ====== 内容数据仓库（P6 S4：已接 Retrofit，Remote 网络失败自动回退 Mock） ======
     // 切换只在这里：Mock → Remote。Remote*Repository 内部包住 Mock 作 fallback，
     // 服务端不可达时 UI 依然能拿到本地数据，不白屏。
-    val feedRepository: FeedRepository by lazy { RemoteFeedRepository(MockFeedRepository()) }
+    // 注：feedRepository 已随「首页动态」一并移除（首页改为本地轨迹时间轴）。
     val routeRepository: RouteRepository by lazy { RemoteRouteRepository(MockRouteRepository()) }
     // 装备台账走本地 Room 实现（纯本地，服务端不参与）；分类仍来自静态 MockData。
     val gearRepository: GearRepository by lazy {

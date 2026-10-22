@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.util.Log
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
@@ -24,6 +25,31 @@ class CityProvider(
 ) {
     private val appContext: Context = context.applicationContext
     private val prefs = appContext.getSharedPreferences("city_cache", Context.MODE_PRIVATE)
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.IO
+    )
+
+    /**
+     * 城市名的可观察最新值（null = 还没拿到）。
+     *
+     * 为什么要有它：权限弹框是异步的，用户点「允许」时首页可能早已组合完毕并停在
+     * 「开启定位」态。只靠一次性的 fetchCity() 返回值，UI 状态不会跟着更新。
+     * 这里把 fetchCity 的结果一并发布出去，首页订阅即可自动刷新。
+     */
+    val cityName = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+
+    init {
+        // 冷启动先用缓存值占位，避免首屏「定位中…」闪一下
+        cityName.value = prefs.getString(KEY_LAST_CITY, null)
+    }
+
+    /** 预热：启动时后台拉一次城市名写缓存并发布。 */
+    fun refresh() {
+        if (!hasLocationPermission()) return
+        scope.launch {
+            runCatching { fetchCity() }
+        }
+    }
 
     fun cachedCity(): String? = prefs.getString(KEY_LAST_CITY, null)
 
@@ -57,6 +83,7 @@ class CityProvider(
         }
         if (!city.isNullOrBlank()) {
             prefs.edit().putString(KEY_LAST_CITY, city).apply()
+            cityName.value = city
         }
         return city
     }

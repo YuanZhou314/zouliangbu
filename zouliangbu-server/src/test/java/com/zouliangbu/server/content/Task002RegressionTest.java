@@ -24,7 +24,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * ① 问题4：route 存在但无 route_detail 行 → 200 + 空正文，不再 404
  * ② 问题6：catalog 末尾固定「最新收录」兜底分组，未分组非推荐线路可见
- * ③ 问题5：V5 种子补正文 + 新增 4 条 → feed 总数 14，feed/1 正文非空
  * ④ 问题7：admin 动态下线（软删）后公开列表不可见
  */
 @SpringBootTest
@@ -122,56 +121,5 @@ class Task002RegressionTest {
                         "$.data.sections[" + (count - 1) + "].routes");
         assertThat(routes).as("latest 分组包含未分组线路")
                 .anySatisfy(item -> assertThat(item.get("name")).isEqualTo("测试-未分组线路"));
-    }
-
-    // ---------- ③ feed 种子正文 + 总数 ----------
-
-    @Test
-    @DisplayName("feed 总数 14（V2 种子 10 条 + V5 新增 4 条）")
-    void feedTotalIs14() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("size", "50"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(14));
-    }
-
-    @Test
-    @DisplayName("feed/1 正文非空（V5 补正文回归）")
-    void feedDetailContentNotEmpty() throws Exception {
-        MvcResult r = mvc.perform(get("/api/v1/feed/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andReturn();
-        String content = com.jayway.jsonpath.JsonPath.read(
-                r.getResponse().getContentAsString(), "$.data.content");
-        assertThat(content).as("feed/1 正文非空").isNotBlank();
-    }
-
-    // ---------- ④ 动态软删（下线）后公开列表不可见 ----------
-
-    @Test
-    @DisplayName("admin 下线动态（status=0）后公开列表不再返回，恢复后可见")
-    void offlineFeedHiddenFromPublicList() throws Exception {
-        String token = login();
-        // 用 feed id=5（丽江，避开 ContentApiTest 的萍乡过滤用例），测完恢复
-        mvc.perform(post("/api/v1/admin/feed/5/status")
-                        .header("X-Admin-Token", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":0}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
-
-        MvcResult r = mvc.perform(get("/api/v1/feed").param("size", "50"))
-                .andExpect(status().isOk())
-                .andReturn();
-        java.util.List<String> ids = com.jayway.jsonpath.JsonPath.read(
-                r.getResponse().getContentAsString(), "$.data.items[*].id");
-        assertThat(ids).as("下线后公开列表不再包含 feed 5").doesNotContain("5");
-
-        // 恢复上线，避免污染共享内存库里的其他用例
-        mvc.perform(post("/api/v1/admin/feed/5/status")
-                        .header("X-Admin-Token", token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":1}"))
-                .andExpect(status().isOk());
     }
 }

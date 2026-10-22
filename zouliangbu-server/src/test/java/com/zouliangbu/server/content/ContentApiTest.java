@@ -39,55 +39,6 @@ class ContentApiTest {
     }
 
     @Test
-    @DisplayName("动态列表按 id 倒序，size 生效")
-    void feedRespectsSize() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("size", "3"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.items.length()").value(3))
-                .andExpect(jsonPath("$.data.items[0].id").value("14"))
-                .andExpect(jsonPath("$.data.items[1].id").value("13"))
-                .andExpect(jsonPath("$.data.nextCursor").isNotEmpty());
-    }
-
-    @Test
-    @DisplayName("游标翻页不重不漏，最后一页 nextCursor 为 null")
-    void feedCursorPaging() throws Exception {
-        String cursor = null;
-        int total = 0;
-        int pages = 0;
-        for (int i = 0; i < 10; i++) {
-            var req = get("/api/v1/feed").param("size", "4");
-            if (cursor != null) {
-                req.param("cursor", cursor);
-            }
-            MvcResult r = mvc.perform(req).andExpect(status().isOk()).andReturn();
-            String body = r.getResponse().getContentAsString();
-            int count = com.jayway.jsonpath.JsonPath.read(body, "$.data.items.length()");
-            total += count;
-            pages++;
-            String next = com.jayway.jsonpath.JsonPath.read(body, "$.data.nextCursor");
-            if (next == null) {
-                break;
-            }
-            cursor = next;
-        }
-        // 种子数据 10 条 + V5 新增 4 条 = 14 条，按 size=4 翻页应为 4+4+4+2 共 4 页，不重复不漏
-        assertThat(pages).isEqualTo(4);
-        assertThat(total).isEqualTo(14);
-    }
-
-    @Test
-    @DisplayName("city 过滤只返回该城市动态")
-    void feedFiltersByCity() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("city", "萍乡"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items.length()").value(2))
-                .andExpect(jsonPath("$.data.items[0].city").value("萍乡"))
-                .andExpect(jsonPath("$.data.items[1].city").value("萍乡"));
-    }
-
-    @Test
     @DisplayName("搜索命中推荐位线路（回归：推荐位无分组曾导致搜不到）")
     void routeSearchHitsRecommendationRoute() throws Exception {
         mvc.perform(get("/api/v1/routes").param("keyword", "武功"))
@@ -135,28 +86,11 @@ class ContentApiTest {
 
     // ---------- 契约完整性：字段增删必须让测试失败 ----------
     //
-    // 这组测试是补漏来的：FeedItem 曾经漏返回 coverStyle，
-    // 而 App 侧 `FeedItem.coverStyle: Int` **没有默认值**，
+    // 这组测试是补漏来的：RouteItem 曾经漏返回 coverStyle，
+    // 而 App 侧 `RouteItem.coverStyle: Int` **没有默认值**，
     // kotlinx.serialization 遇到缺字段会直接抛 MissingFieldException（不会降级成 0）。
     // 只看 HTTP 200 / 只看 jsonPath 里几个字段是查不出来的，
     // 必须"数清字段个数 + 逐个点名"才能拦住。
-
-    @Test
-    @DisplayName("契约：feed 返回 App 需要的全部 8 个字段")
-    void feedItemCarriesAllAppRequiredFields() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("size", "1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.items[0].length()").value(8))
-                .andExpect(jsonPath("$.data.items[0].id").exists())
-                .andExpect(jsonPath("$.data.items[0].title").exists())
-                .andExpect(jsonPath("$.data.items[0].author").exists())
-                .andExpect(jsonPath("$.data.items[0].likeCount").exists())
-                .andExpect(jsonPath("$.data.items[0].city").exists())
-                .andExpect(jsonPath("$.data.items[0].coverStyle").exists())
-                .andExpect(jsonPath("$.data.items[0].coverAspectRatio").exists())
-                // coverUrl 本期恒为 null，用 hasJsonPath 断言"字段在"而不是"值非空"
-                .andExpect(jsonPath("$.data.items[0].coverUrl").hasJsonPath());
-    }
 
     @Test
     @DisplayName("契约：route 返回 App 需要的全部 8 个字段")
@@ -193,19 +127,10 @@ class ContentApiTest {
     }
 
     @Test
-    @DisplayName("参数越界返回 400 而非 500")
-    void outOfRangeSizeIsBadRequest() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("size", "9999"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001));
-    }
-
-    @Test
-    @DisplayName("参数类型错误返回 400 而非 500")
-    void malformedSizeIsBadRequest() throws Exception {
-        mvc.perform(get("/api/v1/feed").param("size", "abc"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001));
+    @DisplayName("路径参数类型错误返回 4xx 而非 500")
+    void malformedPathParamIsNotServerError() throws Exception {
+        mvc.perform(get("/api/v1/routes/abc"))
+                .andExpect(status().is4xxClientError());
     }
 
     @Test
@@ -216,55 +141,10 @@ class ContentApiTest {
                 .andExpect(jsonPath("$.code").value(1004));
     }
 
-    // ---------- feed/{id} 详情 ----------
-
-    @Test
-    @DisplayName("feed/{id} 详情返回全部契约字段，content 是字符串（可空串不可 null）")
-    void feedDetailReturnsAllFields() throws Exception {
-        mvc.perform(get("/api/v1/feed/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.id").value("1"))
-                .andExpect(jsonPath("$.data.title").exists())
-                .andExpect(jsonPath("$.data.author").exists())
-                .andExpect(jsonPath("$.data.likeCount").exists())
-                .andExpect(jsonPath("$.data.city").exists())
-                .andExpect(jsonPath("$.data.coverStyle").exists())
-                .andExpect(jsonPath("$.data.coverUrl").hasJsonPath())
-                .andExpect(jsonPath("$.data.coverAspectRatio").exists())
-                .andExpect(jsonPath("$.data.coverAuthor").hasJsonPath())
-                .andExpect(jsonPath("$.data.content",
-                        org.hamcrest.Matchers.isA(String.class)));
-    }
-
-    @Test
-    @DisplayName("feed/{id} 不存在返回 404 + code 1004 内容不存在")
-    void feedDetailNotFound() throws Exception {
-        mvc.perform(get("/api/v1/feed/99999"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(1004))
-                .andExpect(jsonPath("$.msg").value("内容不存在"));
-    }
-
-    @Test
-    @DisplayName("feed/{id} coverStyle = id % 5")
-    void feedDetailCoverStyleIsIdModuloFive() throws Exception {
-        mvc.perform(get("/api/v1/feed/2"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.coverStyle").value(2));
-    }
-
-    @Test
-    @DisplayName("feed/{id} 传入非数字 id 返回 4xx 而非 500")
-    void feedDetailNonNumericId() throws Exception {
-        mvc.perform(get("/api/v1/feed/abc"))
-                .andExpect(status().is4xxClientError());
-    }
-
     @Test
     @DisplayName("只读接口收到 POST 返回 405")
     void postToReadOnlyEndpoint() throws Exception {
-        mvc.perform(post("/api/v1/feed"))
+        mvc.perform(post("/api/v1/routes"))
                 .andExpect(status().isMethodNotAllowed());
     }
 }

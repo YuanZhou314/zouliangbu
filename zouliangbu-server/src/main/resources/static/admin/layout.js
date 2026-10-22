@@ -9,7 +9,7 @@
  *   <body>
  *     <div id="app"></div>
  *     <script src="layout.js"></script>
- *     <script>Shell.mount({active:'feed', title:'首页动态', render(root){ ... }});</script>
+ *     <script>Shell.mount({active:'routes', title:'线路库', render(root){ ... }});</script>
  *   </body>
  */
 
@@ -23,7 +23,6 @@ const Shell = (function () {
     {
       group: '内容运营',
       items: [
-        { key: 'feed', name: '首页动态', href: 'feed.html' },
         { key: 'routes', name: '线路库', href: 'index.html' },
         { key: 'gear', name: '装备分类', href: 'gear.html' }
       ]

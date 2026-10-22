@@ -58,84 +58,10 @@ class AdminModulesTest {
     @Test
     void newAdminEndpointsRequireToken() throws Exception {
         for (String path : new String[]{
-                "/api/v1/admin/feed", "/api/v1/admin/gear", "/api/v1/admin/route-sections",
+                "/api/v1/admin/gear", "/api/v1/admin/route-sections",
                 "/api/v1/admin/config", "/api/v1/admin/audit", "/api/v1/admin/dashboard"}) {
             mvc.perform(get(path)).andExpect(status().isUnauthorized());
         }
-    }
-
-    // ===== 首页动态：完整 CRUD 闭环 =====
-
-    @Test
-    void feedCrudAndStatusToggle() throws Exception {
-        String t = token();
-        String body = json.writeValueAsString(Map.of(
-                "title", "测试动态-自动用例", "author", "测试员", "city", "萍乡",
-                "coverUrl", "/uploads/2026-10/test.jpg", "coverAspectRatio", 1.2));
-
-        // 新增
-        MvcResult created = mvc.perform(post("/api/v1/admin/feed")
-                        .header("X-Admin-Token", t)
-                        .contentType(MediaType.APPLICATION_JSON).content(body))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0))
-                .andReturn();
-        Map<?, ?> c = json.readValue(created.getResponse().getContentAsString(), Map.class);
-        long id = ((Number) c.get("data")).longValue();
-        assertThat(id).isPositive();
-
-        // 详情：字段都写进去了，hasCover 派生为 true
-        mvc.perform(get("/api/v1/admin/feed/" + id).header("X-Admin-Token", t))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.title").value("测试动态-自动用例"))
-                .andExpect(jsonPath("$.data.city").value("萍乡"))
-                .andExpect(jsonPath("$.data.hasCover").value(true))
-                .andExpect(jsonPath("$.data.status").value(1));
-
-        // 下线 → 列表用 status=0 能查到
-        mvc.perform(post("/api/v1/admin/feed/" + id + "/status")
-                        .header("X-Admin-Token", t)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":0}"))
-                .andExpect(status().isOk());
-        mvc.perform(get("/api/v1/admin/feed?status=0").header("X-Admin-Token", t))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[?(@.id == " + id + ")]").exists());
-
-        // 再上线（软删除可逆）
-        mvc.perform(post("/api/v1/admin/feed/" + id + "/status")
-                        .header("X-Admin-Token", t)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":1}"))
-                .andExpect(status().isOk());
-        mvc.perform(get("/api/v1/admin/feed/" + id).header("X-Admin-Token", t))
-                .andExpect(jsonPath("$.data.status").value(1));
-    }
-
-    @Test
-    void feedRejectsBlankTitleAndBadStatus() throws Exception {
-        String t = token();
-        mvc.perform(post("/api/v1/admin/feed")
-                        .header("X-Admin-Token", t)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"   \",\"author\":\"a\",\"city\":\"萍乡\"}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(1001));
-
-        mvc.perform(post("/api/v1/admin/feed/1/status")
-                        .header("X-Admin-Token", t)
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":9}"))
-                .andExpect(status().isBadRequest());
-    }
-
-    @Test
-    void feedMissingIdIs404NotServerError() throws Exception {
-        String t = token();
-        // 不存在的 id
-        mvc.perform(get("/api/v1/admin/feed/99999999").header("X-Admin-Token", t))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value(1004));
-        // 非数字 id 也必须是 404，不能 500
-        mvc.perform(get("/api/v1/admin/feed/abc").header("X-Admin-Token", t))
-                .andExpect(status().isNotFound());
     }
 
     // ===== 装备分类：code 不可改 =====
@@ -211,16 +137,17 @@ class AdminModulesTest {
     @Test
     void auditRecordsWriteOperations() throws Exception {
         String t = token();
-        mvc.perform(post("/api/v1/admin/feed")
+        // 首页动态模块已下线（V8），用装备分类写接口造审计数据
+        mvc.perform(post("/api/v1/admin/gear")
                         .header("X-Admin-Token", t)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"title\":\"审计用例动态\",\"author\":\"t\",\"city\":\"萍乡\"}"))
+                        .content("{\"code\":\"g98\",\"name\":\"审计用例分类\",\"note\":\"t\",\"sortWeight\":998}"))
                 .andExpect(status().isOk());
 
-        mvc.perform(get("/api/v1/admin/audit?action=feed.&size=50").header("X-Admin-Token", t))
+        mvc.perform(get("/api/v1/admin/audit?action=gear.&size=50").header("X-Admin-Token", t))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.items[?(@.detail =~ /.*审计用例动态.*/)]").exists())
+                .andExpect(jsonPath("$.data.items[?(@.detail =~ /.*审计用例分类.*/)]").exists())
                 .andExpect(jsonPath("$.data.total").isNumber());
     }
 
@@ -232,8 +159,7 @@ class AdminModulesTest {
         mvc.perform(get("/api/v1/admin/dashboard").header("X-Admin-Token", t))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                // 种子数据里 feed 是 10 条、route 是 12 条，all-online
-                .andExpect(jsonPath("$.data.feedOnline").isNumber())
+                // 种子数据里 route 是 12 条，all-online（feed 已于 V8 下线）
                 .andExpect(jsonPath("$.data.routeOnline").isNumber())
                 .andExpect(jsonPath("$.data.submissionPending").isNumber())
                 .andExpect(jsonPath("$.data.recentAudit").isArray());

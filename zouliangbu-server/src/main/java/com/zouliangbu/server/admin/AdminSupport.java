@@ -33,7 +33,7 @@ public final class AdminSupport {
 
     /**
      * 字符串 id → 主键。解析失败返回 null 而不是抛异常：
-     * 后台 URL 是手敲的，{@code /feed/abc} 应该回 404，不该是 500。
+     * 后台 URL 是手敲的，{@code /gear/abc} 应该回 404，不该是 500。
      */
     public static Long parseId(String raw) {
         if (raw == null || raw.isBlank()) {

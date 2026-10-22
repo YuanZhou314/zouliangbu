@@ -31,7 +31,7 @@ public class AdminAuditController {
     /**
      * 分页查询。用页码分页而不是 cursor —— 后台要"共 N 条"和跳页。
      *
-     * @param action 前缀匹配，如 {@code feed.} 查所有动态相关操作
+     * @param action 前缀匹配，如 {@code gear.} 查所有装备分类相关操作
      */
     @GetMapping
     public ResponseEntity<ApiResponse<PageResult<AuditRow>>> list(

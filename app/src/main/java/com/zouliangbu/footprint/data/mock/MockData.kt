@@ -1,6 +1,5 @@
 package com.zouliangbu.footprint.data.mock
 
-import com.zouliangbu.footprint.data.model.FeedItem
 import com.zouliangbu.footprint.data.model.GearCategory
 import com.zouliangbu.footprint.data.model.RouteCatalog
 import com.zouliangbu.footprint.data.model.RouteItem
@@ -11,19 +10,6 @@ import com.zouliangbu.footprint.data.model.RouteSection
  * 山名/线路为国内真实知名徒步地，封面用色块占位，不依赖图片资源。
  */
 object MockData {
-
-    val feed: List<FeedItem> = listOf(
-        FeedItem("f1", "武功山反穿：两天一夜看云海日出全记录", "山野拾光", 128, "萍乡", 0, 1.25f),
-        FeedItem("f2", "莫干山小环线，亲子徒步初体验", "竹间漫步", 46, "湖州", 1, 1.0f),
-        FeedItem("f3", "雨崩村徒步第三天，神瀑下面的风太大了", "行走的高原", 302, "迪庆", 2, 0.85f),
-        FeedItem("f4", "香山红叶快到峰值了，周末冲了一条冷门线", "西山客", 88, "北京", 3, 1.15f),
-        FeedItem("f5", "虎跳峡高路徒步：一条值得走第二遍的线", "峡谷行者", 215, "丽江", 4, 1.3f),
-        FeedItem("f6", "新手第一次重装，徽杭古道 18km 打卡", "青弋江畔", 57, "宣城", 1, 0.9f),
-        FeedItem("f7", "梧桐山夜爬看日出，凌晨四点的深圳", "鹏城夜徒", 173, "深圳", 0, 1.05f),
-        FeedItem("f8", "武功山帐篷节人从众，但云海值了", "云中草原", 96, "萍乡", 2, 1.2f),
-        FeedItem("f9", "四姑娘山大峰登顶，人生第一座 5000+", "雪线之上", 421, "阿坝", 3, 0.95f),
-        FeedItem("f10", "武功山—明月山穿越，三天两晚行程贴", "赣西驴友", 64, "宜春", 4, 1.1f)
-    )
 
     private val wugongshan = RouteItem("r1", "武功山反穿线", "萍乡", 13.5, 1200, 0, listOf("户外毕业线", "露营"))
     private val huizhou = RouteItem("r2", "惠州大南山", "惠州", 13.6, 1050, 1, listOf("草甸", "一日往返"))

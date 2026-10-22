@@ -6,9 +6,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.zouliangbu.server.admin.entity.AdminAuditEntity;
 import com.zouliangbu.server.admin.mapper.AdminAuditMapper;
-import com.zouliangbu.server.content.entity.FeedPost;
 import com.zouliangbu.server.content.entity.RouteEntity;
-import com.zouliangbu.server.content.mapper.FeedPostMapper;
 import com.zouliangbu.server.content.mapper.RouteMapper;
 import com.zouliangbu.server.route.RouteSubmissionEntity;
 import com.zouliangbu.server.route.mapper.RouteSubmissionMapper;
@@ -31,16 +29,13 @@ import static com.zouliangbu.server.admin.AdminSupport.ok;
 @RequestMapping("/api/v1/admin/dashboard")
 public class AdminDashboardController {
 
-    private final FeedPostMapper feedMapper;
     private final RouteMapper routeMapper;
     private final RouteSubmissionMapper submissionMapper;
     private final AdminAuditMapper auditMapper;
 
-    public AdminDashboardController(FeedPostMapper feedMapper,
-                                    RouteMapper routeMapper,
+    public AdminDashboardController(RouteMapper routeMapper,
                                     RouteSubmissionMapper submissionMapper,
                                     AdminAuditMapper auditMapper) {
-        this.feedMapper = feedMapper;
         this.routeMapper = routeMapper;
         this.submissionMapper = submissionMapper;
         this.auditMapper = auditMapper;
@@ -48,14 +43,6 @@ public class AdminDashboardController {
 
     @GetMapping
     public ResponseEntity<ApiResponse<Dashboard>> overview() {
-        // 动态
-        long feedOnline = count(feedMapper, new LambdaQueryWrapper<FeedPost>().eq(FeedPost::getStatus, 1));
-        long feedOffline = count(feedMapper, new LambdaQueryWrapper<FeedPost>().eq(FeedPost::getStatus, 0));
-        // 首页第一屏有没有图，是 App 观感的关键指标，单独算
-        long feedNoCover = count(feedMapper, new LambdaQueryWrapper<FeedPost>()
-                .eq(FeedPost::getStatus, 1)
-                .and(w -> w.isNull(FeedPost::getCoverUrl).or().eq(FeedPost::getCoverUrl, "")));
-
         // 线路
         long routeOnline = count(routeMapper, new LambdaQueryWrapper<RouteEntity>().eq(RouteEntity::getStatus, 1));
         long routeOffline = count(routeMapper, new LambdaQueryWrapper<RouteEntity>().eq(RouteEntity::getStatus, 0));
@@ -80,8 +67,7 @@ public class AdminDashboardController {
                         e.getCreatedAt() == null ? "" : e.getCreatedAt().toString()))
                 .toList();
 
-        return ok(new Dashboard(feedOnline, feedOffline, feedNoCover,
-                routeOnline, routeOffline, routeRecommend,
+        return ok(new Dashboard(routeOnline, routeOffline, routeRecommend,
                 pending, approved, rejected, recentItems));
     }
 
@@ -93,8 +79,7 @@ public class AdminDashboardController {
 
     // ===== DTO =====
 
-    public record Dashboard(long feedOnline, long feedOffline, long feedNoCover,
-                            long routeOnline, long routeOffline, long routeRecommend,
+    public record Dashboard(long routeOnline, long routeOffline, long routeRecommend,
                             long submissionPending, long submissionApproved, long submissionRejected,
                             List<AuditItem> recentAudit) {}
 
