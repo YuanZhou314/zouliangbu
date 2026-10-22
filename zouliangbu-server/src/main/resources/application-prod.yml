@@ -12,10 +12,14 @@ spring:
   flyway:
     locations: classpath:db/migration/mysql,classpath:db/migration/common
 
-# 气象代理：生产必须用 QWEATHER_KEY 环境变量提供，不给默认值。
+# 气象代理：和风 JWT 凭据，生产必须用环境变量提供，不给默认值。
 zlb:
   weather:
-    qweather-key: ${QWEATHER_KEY:}
+    qweather-host: ${QWEATHER_HOST:https://api.qweather.com/v7}
+    qweather-project-id: ${QWEATHER_PROJECT_ID:}
+    qweather-credential-id: ${QWEATHER_CREDENTIAL_ID:}
+    qweather-dev-id: ${QWEATHER_DEV_ID:}
+    qweather-private-key: ${QWEATHER_PRIVATE_KEY:}
     cache-ttl-sec: 600
     nowcast-cache-ttl-sec: 300
 
