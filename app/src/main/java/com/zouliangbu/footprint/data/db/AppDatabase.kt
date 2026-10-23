@@ -19,8 +19,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * 没有它，改表时只能靠 `fallbackToDestructiveMigration` 清库——用户的轨迹会全丢。
  */
 @Database(
-    entities = [TrackSession::class, TrackPoint::class, GearItem::class, WeatherCacheEntity::class],
-    version = 6,
+    entities = [
+        TrackSession::class,
+        TrackPoint::class,
+        GearItem::class,
+        WeatherCacheEntity::class,
+        RouteCache::class,
+        RouteCachePoint::class
+    ],
+    version = 8,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,6 +36,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pointDao(): TrackPointDao
     abstract fun gearItemDao(): GearItemDao
     abstract fun weatherCacheDao(): WeatherCacheDao
+    abstract fun routeCacheDao(): RouteCacheDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -108,11 +116,65 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         /**
+         * v7（循迹 a）：线路轨迹离线缓存。
+         *
+         * 两张表：route_cache（线路元数据，routeId 唯一）+ route_cache_point（轨迹点，外键级联删）。
+         * 列顺序 / 类型 / NOT NULL 必须与 [RouteCache] / [RouteCachePoint] 逐列一致，否则 schema 校验失败。
+         * entity 没写 @ColumnInfo(defaultValue)，这里也不带 DEFAULT 子句。
+         */
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `route_cache` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`routeId` INTEGER NOT NULL, " +
+                            "`name` TEXT NOT NULL, " +
+                            "`fetchedAt` INTEGER NOT NULL, " +
+                            "`pointCount` INTEGER NOT NULL)"
+                )
+                db.execSQL(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS `index_route_cache_routeId` " +
+                            "ON `route_cache` (`routeId`)"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `route_cache_point` (" +
+                            "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                            "`cacheId` INTEGER NOT NULL, " +
+                            "`seq` INTEGER NOT NULL, " +
+                            "`lat` REAL NOT NULL, " +
+                            "`lng` REAL NOT NULL, " +
+                            "`altitude` REAL, " +
+                            "FOREIGN KEY(`cacheId`) REFERENCES `route_cache`(`id`) " +
+                            "ON UPDATE NO ACTION ON DELETE CASCADE)"
+                )
+                db.execSQL(
+                    "CREATE INDEX IF NOT EXISTS `index_route_cache_point_cacheId` " +
+                            "ON `route_cache_point` (`cacheId`)"
+                )
+            }
+        }
+
+        /**
+         * v8：会话来源（task：导入的轨迹不算「我的记录」运动量）。
+         * 老数据全是自己记录的，默认 'recorded'。
+         */
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE track_sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'recorded'"
+                )
+            }
+        }
+
+        /**
          * 迁移清单。Room 会从当前库版本逐级跑，缺一条就在启动时抛
          * `IllegalStateException: Room cannot verify the data integrity`。
          */
         private val MIGRATIONS: Array<Migration> =
-            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+            arrayOf(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8
+            )
 
         fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {

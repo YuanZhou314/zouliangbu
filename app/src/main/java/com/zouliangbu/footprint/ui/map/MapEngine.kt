@@ -23,6 +23,12 @@ interface MapEngine {
     /** 清空轨迹折线（不销毁对象，仅隐藏）。 */
     fun clearTrack()
 
+    /**
+     * 全量设置**参考线**（循迹 b：记录页叠加已缓存线路，跟着走）。
+     * 与 [setTrack] 独立：参考线用虚线、不同色，压在实时轨迹下面；传空列表清除。
+     */
+    fun setReferenceTrack(points: List<MapPoint>)
+
     /** 起点 / 终点 marker；传 null 表示不显示该端。 */
     fun setEndpoints(start: MapPoint?, end: MapPoint?)
 
@@ -46,6 +52,23 @@ interface MapEngine {
 
     /** 缩小一级。 */
     fun zoomOut()
+
+    // ===== 以下为"地图模式视口卡片"预留的能力（task-001 后续接入，当前无业务消费）=====
+
+    /** 当前相机可视区的经纬度范围（GCJ-02）。地图未就绪时返回 null。 */
+    fun visibleBounds(): MapBounds?
+
+    /** 相机移动结束回调（用户拖动/缩放、程序动画落定）。 */
+    var onCameraIdle: (() -> Unit)?
+
+    /** 点位 marker 被点击的回调，参数是 [MapMarker.id]。 */
+    var onMarkerClick: ((String) -> Unit)?
+
+    /** 显示一批点位 marker（先清掉上一批，幂等）。 */
+    fun showPointMarkers(markers: List<MapMarker>)
+
+    /** 清掉 [showPointMarkers] 添加的所有 marker。 */
+    fun clearPointMarkers()
 }
 
 /** 底图类型，与厂商无关（高德 MAP_TYPE_* / osmdroid tile source）。 */

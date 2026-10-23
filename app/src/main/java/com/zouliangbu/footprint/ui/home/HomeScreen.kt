@@ -255,7 +255,8 @@ fun HomeScreen(
 private data class GroupStats(val count: Int, val totalMs: Long, val totalMeters: Float)
 
 private fun statsOf(tracks: List<TrackSummary>, month: String): GroupStats {
-    val inMonth = tracks.filter { monthKey(it.startTime) == month }
+    // 汇总只算自己走出来的：导入的 GPX 是别人的轨迹，不该出现在"我这个月走了多少"里。
+    val inMonth = tracks.filter { monthKey(it.startTime) == month && !it.isImported }
     return GroupStats(
         count = inMonth.size,
         totalMs = inMonth.sumOf { it.activeDurationMs },

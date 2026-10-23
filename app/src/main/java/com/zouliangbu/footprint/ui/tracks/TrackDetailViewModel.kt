@@ -13,6 +13,7 @@ import com.zouliangbu.footprint.data.db.TrackSession
 import com.zouliangbu.footprint.data.remote.ProposalDto
 import com.zouliangbu.footprint.data.repo.ProposalRepository
 import com.zouliangbu.footprint.export.GpxExporter
+import com.zouliangbu.footprint.plants.PlantSpecies
 import com.zouliangbu.footprint.ui.map.MapPoint
 import com.zouliangbu.footprint.util.Distance
 import com.zouliangbu.footprint.util.Elevation
@@ -49,7 +50,15 @@ data class TrackDetailUi(
     /** 图表序列：速度 / 配速 / 海拔 / 累计爬升下降（见 TrackSeries）。 */
     val series: TrackSeries.Bundle = TrackSeries.Bundle(),
     /** 与历史记录的共同路段对比（记录层做深的核心功能）。 */
-    val compare: CompareUi = CompareUi()
+    val compare: CompareUi = CompareUi(),
+    /** 沿途常见植物：起点落入已覆盖行政区才有值，否则 null（UI 整块隐藏）。 */
+    val plants: PlantGuideUi? = null
+)
+
+/** 沿途常见植物区块的 UI 状态（来自本地 assets 图鉴，离线可用）。 */
+data class PlantGuideUi(
+    val regionName: String,
+    val species: List<PlantSpecies>
 )
 
 /**
@@ -80,6 +89,7 @@ class TrackDetailViewModel(
 ) : AndroidViewModel(app) {
 
     private val repo = (app as FootprintApp).repository
+    private val plantRepo = (app as FootprintApp).plantGuideRepository
 
     private val _state = MutableStateFlow(TrackDetailUi())
     val state: StateFlow<TrackDetailUi> = _state.asStateFlow()
@@ -120,6 +130,20 @@ class TrackDetailViewModel(
                 splits = TrackSplits.splitsOf(raw),
                 series = TrackSeries.build(raw)
             )
+
+            // 沿途常见植物：起点行政区命中才有。纯 assets 解析 + 几何判定，
+            // 很快，但失败/未覆盖都要静默 —— 这是锦上添花模块，不配拥有报错。
+            val startPoint = raw.firstOrNull()
+            if (startPoint != null) {
+                val region = runCatching {
+                    plantRepo.regionFor(startPoint.lat, startPoint.lng)
+                }.getOrNull()
+                if (region != null && region.species.isNotEmpty()) {
+                    _state.value = _state.value.copy(
+                        plants = PlantGuideUi(region.regionName, region.species)
+                    )
+                }
+            }
 
             // 对比单独一步：它要读别的会话的点集，慢且可能失败，不能拖累首屏。
             if (session != null) {

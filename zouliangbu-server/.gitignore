@@ -18,3 +18,7 @@ uploads/
 
 # 部署本地配置（含服务器地址，不入库）
 deploy/deploy.env
+
+# 本地密钥（和风 JWT 私钥等，绝不入库）
+.qweather_private_key.pem
+*.pem

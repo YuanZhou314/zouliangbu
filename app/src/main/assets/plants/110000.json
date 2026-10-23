@@ -1,0 +1,1163 @@
+{
+ "version": 1,
+ "adcode": "110000",
+ "regionName": "北京市",
+ "generatedAt": "2026-10-23T21:39:09",
+ "sources": {
+  "gbif": {
+   "totalPlantRecords": 64696,
+   "license": "GBIF 开放数据，展示需引用声明"
+  },
+  "inaturalist": {
+   "totalSpecies": 3645,
+   "license": "照片 CC，逐张见 photo.license"
+  }
+ },
+ "topN": 40,
+ "species": [
+  {
+   "scientificName": "Orychophragmus violaceus",
+   "nameCn": "大紫羅欄花",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 3041285,
+   "inatTaxonId": 359576,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/638017336/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/349728129"
+   },
+   "score": 3.0,
+   "gbifCount": 518,
+   "inatCount": 638
+  },
+  {
+   "scientificName": "Rehmannia glutinosa",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 7516558,
+   "inatTaxonId": 544445,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/197449921/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Chuangzao, some rights reserved (CC BY-NC), uploaded by Chuangzao",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.9,
+   "gbifCount": 484,
+   "inatCount": 523
+  },
+  {
+   "scientificName": "Viola prionantha",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 7296610,
+   "inatTaxonId": 500891,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/185330876/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Chuangzao, some rights reserved (CC BY-NC), uploaded by Chuangzao",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.888,
+   "gbifCount": 393,
+   "inatCount": 598
+  },
+  {
+   "scientificName": "Vitex negundo",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2925564,
+   "inatTaxonId": 170273,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/80459619/medium.jpeg",
+    "license": "cc0",
+    "attribution": "no rights reserved, uploaded by 葉子",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.838,
+   "gbifCount": 401,
+   "inatCount": 483
+  },
+  {
+   "scientificName": "Trigonotis peduncularis",
+   "nameCn": "附地菜",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 2926112,
+   "inatTaxonId": 169982,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/628383216/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/344852038"
+   },
+   "score": 2.675,
+   "gbifCount": 360,
+   "inatCount": 362
+  },
+  {
+   "scientificName": "Crepidiastrum sonchifolium",
+   "nameCn": "尖裂假还阳参 jian lie jia huan yang shen",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 3145185,
+   "inatTaxonId": 479773,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/230063786/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Chuangzao, some rights reserved (CC BY-NC), uploaded by Chuangzao",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.625,
+   "gbifCount": 295,
+   "inatCount": 413
+  },
+  {
+   "scientificName": "Broussonetia papyrifera",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5361944,
+   "inatTaxonId": 128032,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/142337328/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) dearufo, some rights reserved (CC BY-NC)",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.612,
+   "gbifCount": 348,
+   "inatCount": 357
+  },
+  {
+   "scientificName": "Androsace umbellata",
+   "nameCn": "地錢草",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 4007936,
+   "inatTaxonId": 557651,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/368401563/medium.jpeg",
+    "license": "cc0",
+    "attribution": "no rights reserved, uploaded by 葉子",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.5,
+   "gbifCount": 299,
+   "inatCount": 343
+  },
+  {
+   "scientificName": "Cynanchum rostellatum",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 9500699,
+   "inatTaxonId": 1036899,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/151625046/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Станислав, some rights reserved (CC BY-NC), uploaded by Станислав",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.487,
+   "gbifCount": 301,
+   "inatCount": 322
+  },
+  {
+   "scientificName": "Ziziphus jujuba",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 3039423,
+   "inatTaxonId": 428365,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/50110627/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) oreste83, some rights reserved (CC BY-NC)",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.15,
+   "gbifCount": 246,
+   "inatCount": 305
+  },
+  {
+   "scientificName": "Ixeris chinensis",
+   "nameCn": "中华苦荬菜 zhong hua ku mai cai",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 8151301,
+   "inatTaxonId": 344578,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/35178610/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Hong, some rights reserved (CC BY-NC), uploaded by Hong",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 2.1,
+   "gbifCount": 248,
+   "inatCount": 287
+  },
+  {
+   "scientificName": "Ailanthus altissima",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 3190653,
+   "inatTaxonId": 57278,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/100632048/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/62770618"
+   },
+   "score": 2.062,
+   "gbifCount": 227,
+   "inatCount": 313
+  },
+  {
+   "scientificName": "Acer truncatum",
+   "nameCn": "元宝枫",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 7263012,
+   "inatTaxonId": 461754,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/50266325/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Jason, some rights reserved (CC BY-NC), uploaded by Jason",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.813,
+   "gbifCount": 206,
+   "inatCount": 306
+  },
+  {
+   "scientificName": "Prunus davidiana",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 543497,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111095451/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Nan Yang, some rights reserved (CC BY-NC), uploaded by Nan Yang",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.812,
+   "gbifCount": 0,
+   "inatCount": 394
+  },
+  {
+   "scientificName": "Rubus crataegifolius",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2999200,
+   "inatTaxonId": 448109,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/680363238/medium.jpg",
+    "license": "cc-by",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/372334007"
+   },
+   "score": 1.6,
+   "gbifCount": 238,
+   "inatCount": 262
+  },
+  {
+   "scientificName": "Spiraea trilobata",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 3026656,
+   "inatTaxonId": 169256,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/29131752/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Павел Голяков, some rights reserved (CC BY-NC), uploaded by Павел Голяков",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.587,
+   "gbifCount": 243,
+   "inatCount": 261
+  },
+  {
+   "scientificName": "Spiraea ouensanensis",
+   "nameCn": "土莊繡線菊",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 3026541,
+   "inatTaxonId": 1398338,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/71925648/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) 茶棚, some rights reserved (CC BY-NC), uploaded by 茶棚",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.55,
+   "gbifCount": 226,
+   "inatCount": 269
+  },
+  {
+   "scientificName": "Lonicera maackii",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 82342,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/277949422/medium.jpg",
+    "license": "cc-by",
+    "attribution": "(c) Andrew Conboy, some rights reserved (CC BY), uploaded by Andrew Conboy",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.438,
+   "gbifCount": 0,
+   "inatCount": 301
+  },
+  {
+   "scientificName": "Dianthus chinensis",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 3085418,
+   "inatTaxonId": 161763,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/139721641/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) maxpauel, some rights reserved (CC BY-NC), uploaded by maxpauel",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.375,
+   "gbifCount": 246,
+   "inatCount": 247
+  },
+  {
+   "scientificName": "Pinus tabuliformis",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5285359,
+   "inatTaxonId": 135667,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/615353295/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/338380066"
+   },
+   "score": 1.375,
+   "gbifCount": 163,
+   "inatCount": 310
+  },
+  {
+   "scientificName": "Ginkgo biloba",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 64350,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/397250612/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) 鐦鍆錒/锎钔锕（Man Hoimoon）, some rights reserved (CC BY-NC), uploaded by 鐦鍆錒/锎钔锕（Man Hoimoon）",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.362,
+   "gbifCount": 0,
+   "inatCount": 281
+  },
+  {
+   "scientificName": "Gueldenstaedtia verna",
+   "nameCn": "小米口袋",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 2959902,
+   "inatTaxonId": 701721,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/187397012/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Chuangzao, some rights reserved (CC BY-NC), uploaded by Chuangzao",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.325,
+   "gbifCount": 230,
+   "inatCount": 249
+  },
+  {
+   "scientificName": "Chelidonium asiaticum",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 1097760,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/403926893/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) there_be_dragons, some rights reserved (CC BY-NC), uploaded by there_be_dragons",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.325,
+   "gbifCount": 0,
+   "inatCount": 280
+  },
+  {
+   "scientificName": "Lagopsis supina",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5609121,
+   "inatTaxonId": 544443,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/413119712/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Norbert Sauberer, some rights reserved (CC BY-NC), uploaded by Norbert Sauberer",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.288,
+   "gbifCount": 200,
+   "inatCount": 263
+  },
+  {
+   "scientificName": "Prunus persica",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 78755,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/635547589/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/348474694"
+   },
+   "score": 1.288,
+   "gbifCount": 0,
+   "inatCount": 278
+  },
+  {
+   "scientificName": "Potentilla indica",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5365717,
+   "inatTaxonId": 243824,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/231428764/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/135667759"
+   },
+   "score": 1.262,
+   "gbifCount": 210,
+   "inatCount": 256
+  },
+  {
+   "scientificName": "Ulmus pumila",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5361877,
+   "inatTaxonId": 79463,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/164092406/medium.jpg",
+    "license": "cc-by",
+    "attribution": "(c) Steve Matson, some rights reserved (CC BY), uploaded by Steve Matson",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.25,
+   "gbifCount": 154,
+   "inatCount": 321
+  },
+  {
+   "scientificName": "Styphnolobium japonicum",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 53945,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/21952068/medium.jpg",
+    "license": "cc-by",
+    "attribution": "(c) Michael Ellis, some rights reserved (CC BY), uploaded by Michael Ellis",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.25,
+   "gbifCount": 0,
+   "inatCount": 275
+  },
+  {
+   "scientificName": "Quercus mongolica",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2879685,
+   "inatTaxonId": 361796,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/111337273/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Светлана Нестерова, some rights reserved (CC BY-NC), uploaded by Светлана Нестерова",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.237,
+   "gbifCount": 189,
+   "inatCount": 274
+  },
+  {
+   "scientificName": "Dioscorea nipponica",
+   "nameCn": "牛尾薯藤",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 2754586,
+   "inatTaxonId": 469567,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/440881328/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) wresy, some rights reserved (CC BY-NC)",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.175,
+   "gbifCount": 277,
+   "inatCount": 229
+  },
+  {
+   "scientificName": "Rubia cordifolia",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2892192,
+   "inatTaxonId": 500587,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/31293336/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) V.S. Volkotrub, some rights reserved (CC BY-NC), uploaded by V.S. Volkotrub",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 1.163,
+   "gbifCount": 209,
+   "inatCount": 253
+  },
+  {
+   "scientificName": "Prunus triloba",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 167473,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/293930031/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/169532002"
+   },
+   "score": 1.137,
+   "gbifCount": 0,
+   "inatCount": 273
+  },
+  {
+   "scientificName": "Pulsatilla chinensis",
+   "nameCn": "広葉翁草",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 7278009,
+   "inatTaxonId": 491582,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/630438517/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/345898350"
+   },
+   "score": 1.113,
+   "gbifCount": 277,
+   "inatCount": 222
+  },
+  {
+   "scientificName": "Clematis heracleifolia",
+   "nameCn": "大叶铁线莲",
+   "nameCnSource": "gbif-vernacular",
+   "gbifKey": 6374393,
+   "inatTaxonId": 553566,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/566147115/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) shixintong, some rights reserved (CC BY-NC), uploaded by shixintong",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 0.938,
+   "gbifCount": 213,
+   "inatCount": 236
+  },
+  {
+   "scientificName": "Nelumbo nucifera",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2882449,
+   "inatTaxonId": 82814,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/116385724/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Inessa Ermolina, some rights reserved (CC BY-NC), uploaded by Inessa Ermolina",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 0.9,
+   "gbifCount": 157,
+   "inatCount": 273
+  },
+  {
+   "scientificName": "Cotinus coggygria",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 3190522,
+   "inatTaxonId": 133366,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/136745491/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Jeremy Schewe, some rights reserved (CC BY-NC), uploaded by Jeremy Schewe",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 0.875,
+   "gbifCount": 183,
+   "inatCount": 253
+  },
+  {
+   "scientificName": "Chelidonium majus",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5334186,
+   "inatTaxonId": null,
+   "photo": null,
+   "score": 0.85,
+   "gbifCount": 308,
+   "inatCount": null
+  },
+  {
+   "scientificName": "Koelreuteria paniculata",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 5421180,
+   "inatTaxonId": 58320,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/334531030/medium.jpeg",
+    "license": "cc-by-nc",
+    "attribution": "(c) Charles, some rights reserved (CC BY-NC), uploaded by Charles",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 0.85,
+   "gbifCount": 169,
+   "inatCount": 256
+  },
+  {
+   "scientificName": "Ipomoea purpurea",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": 2928576,
+   "inatTaxonId": 52344,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/509186871/medium.jpg",
+    "license": "cc-by-nc",
+    "attribution": "(c) jaguarundi_2025, some rights reserved (CC BY-NC)",
+    "source": "inaturalist",
+    "observationUrl": ""
+   },
+   "score": 0.825,
+   "gbifCount": 196,
+   "inatCount": 242
+  },
+  {
+   "scientificName": "Prunus armeniaca",
+   "nameCn": null,
+   "nameCnSource": null,
+   "gbifKey": null,
+   "inatTaxonId": 135331,
+   "photo": {
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/363327645/medium.jpg",
+    "license": "cc-by",
+    "attribution": "",
+    "source": "inaturalist",
+    "observationUrl": "https://www.inaturalist.org/observations/205475920"
+   },
+   "score": 0.762,
+   "gbifCount": 0,
+   "inatCount": 248
+  }
+ ],
+ "bbox": [
+  115.42341,
+  39.44276,
+  117.51458,
+  41.0608
+ ],
+ "boundary": [
+  [
+   [
+    117.2239,
+    40.37554
+   ],
+   [
+    117.25765,
+    40.43537
+   ],
+   [
+    117.21206,
+    40.49468
+   ],
+   [
+    117.26412,
+    40.51727
+   ],
+   [
+    117.29956,
+    40.5668
+   ],
+   [
+    117.3893,
+    40.56124
+   ],
+   [
+    117.41274,
+    40.60512
+   ],
+   [
+    117.46788,
+    40.64952
+   ],
+   [
+    117.50293,
+    40.66967
+   ],
+   [
+    117.41485,
+    40.68595
+   ],
+   [
+    117.29042,
+    40.66018
+   ],
+   [
+    117.21062,
+    40.69198
+   ],
+   [
+    117.14253,
+    40.6972
+   ],
+   [
+    117.03611,
+    40.69727
+   ],
+   [
+    116.96963,
+    40.70636
+   ],
+   [
+    116.90457,
+    40.77729
+   ],
+   [
+    116.86145,
+    40.82536
+   ],
+   [
+    116.80595,
+    40.84084
+   ],
+   [
+    116.73976,
+    40.89666
+   ],
+   [
+    116.70237,
+    40.94063
+   ],
+   [
+    116.69384,
+    41.01369
+   ],
+   [
+    116.65391,
+    41.05626
+   ],
+   [
+    116.62288,
+    41.02069
+   ],
+   [
+    116.54783,
+    40.988
+   ],
+   [
+    116.47419,
+    40.97861
+   ],
+   [
+    116.47361,
+    40.91974
+   ],
+   [
+    116.39853,
+    40.90602
+   ],
+   [
+    116.33883,
+    40.92573
+   ],
+   [
+    116.38971,
+    40.86181
+   ],
+   [
+    116.45723,
+    40.7983
+   ],
+   [
+    116.40784,
+    40.78042
+   ],
+   [
+    116.31317,
+    40.7702
+   ],
+   [
+    116.26959,
+    40.77716
+   ],
+   [
+    116.22036,
+    40.74467
+   ],
+   [
+    116.17368,
+    40.68903
+   ],
+   [
+    116.12042,
+    40.63329
+   ],
+   [
+    116.05091,
+    40.60612
+   ],
+   [
+    115.96588,
+    40.601
+   ],
+   [
+    115.88541,
+    40.59522
+   ],
+   [
+    115.7922,
+    40.56129
+   ],
+   [
+    115.7431,
+    40.51385
+   ],
+   [
+    115.77953,
+    40.46408
+   ],
+   [
+    115.84063,
+    40.38109
+   ],
+   [
+    115.88526,
+    40.35702
+   ],
+   [
+    115.92924,
+    40.32105
+   ],
+   [
+    115.96701,
+    40.26561
+   ],
+   [
+    115.89848,
+    40.23451
+   ],
+   [
+    115.8555,
+    40.18886
+   ],
+   [
+    115.82227,
+    40.15261
+   ],
+   [
+    115.74925,
+    40.13771
+   ],
+   [
+    115.6931,
+    40.13192
+   ],
+   [
+    115.62139,
+    40.11871
+   ],
+   [
+    115.56342,
+    40.09792
+   ],
+   [
+    115.48899,
+    40.04375
+   ],
+   [
+    115.42851,
+    39.98433
+   ],
+   [
+    115.46446,
+    39.94014
+   ],
+   [
+    115.52918,
+    39.87595
+   ],
+   [
+    115.56346,
+    39.81642
+   ],
+   [
+    115.48324,
+    39.79868
+   ],
+   [
+    115.43916,
+    39.75268
+   ],
+   [
+    115.49978,
+    39.69128
+   ],
+   [
+    115.5067,
+    39.65213
+   ],
+   [
+    115.52423,
+    39.59894
+   ],
+   [
+    115.58611,
+    39.58941
+   ],
+   [
+    115.65027,
+    39.601
+   ],
+   [
+    115.6986,
+    39.57059
+   ],
+   [
+    115.74149,
+    39.53629
+   ],
+   [
+    115.82146,
+    39.5095
+   ],
+   [
+    115.82869,
+    39.54131
+   ],
+   [
+    115.88359,
+    39.5511
+   ],
+   [
+    115.90967,
+    39.58828
+   ],
+   [
+    115.94319,
+    39.57738
+   ],
+   [
+    115.97844,
+    39.59569
+   ],
+   [
+    116.03286,
+    39.57461
+   ],
+   [
+    116.13031,
+    39.56946
+   ],
+   [
+    116.19685,
+    39.58899
+   ],
+   [
+    116.24619,
+    39.55717
+   ],
+   [
+    116.26932,
+    39.49549
+   ],
+   [
+    116.3345,
+    39.45702
+   ],
+   [
+    116.43724,
+    39.44595
+   ],
+   [
+    116.42534,
+    39.48126
+   ],
+   [
+    116.40282,
+    39.51439
+   ],
+   [
+    116.44038,
+    39.51627
+   ],
+   [
+    116.47095,
+    39.5546
+   ],
+   [
+    116.52039,
+    39.57716
+   ],
+   [
+    116.54944,
+    39.59614
+   ],
+   [
+    116.60013,
+    39.61965
+   ],
+   [
+    116.63559,
+    39.60482
+   ],
+   [
+    116.70069,
+    39.59096
+   ],
+   [
+    116.72552,
+    39.62407
+   ],
+   [
+    116.7907,
+    39.59604
+   ],
+   [
+    116.82636,
+    39.63312
+   ],
+   [
+    116.88324,
+    39.67535
+   ],
+   [
+    116.8828,
+    39.71847
+   ],
+   [
+    116.90156,
+    39.7552
+   ],
+   [
+    116.9538,
+    39.78607
+   ],
+   [
+    116.9029,
+    39.84135
+   ],
+   [
+    116.84725,
+    39.85862
+   ],
+   [
+    116.79474,
+    39.88125
+   ],
+   [
+    116.76644,
+    39.97635
+   ],
+   [
+    116.80338,
+    40.03216
+   ],
+   [
+    116.87362,
+    40.04152
+   ],
+   [
+    116.94501,
+    40.04863
+   ],
+   [
+    117.02088,
+    40.03245
+   ],
+   [
+    117.07063,
+    40.06418
+   ],
+   [
+    117.16014,
+    40.07555
+   ],
+   [
+    117.20525,
+    40.07028
+   ],
+   [
+    117.23823,
+    40.11176
+   ],
+   [
+    117.29707,
+    40.12127
+   ],
+   [
+    117.35053,
+    40.14483
+   ],
+   [
+    117.38123,
+    40.17245
+   ],
+   [
+    117.37955,
+    40.20132
+   ],
+   [
+    117.34825,
+    40.23457
+   ],
+   [
+    117.30431,
+    40.27818
+   ],
+   [
+    117.25983,
+    40.33619
+   ]
+  ]
+ ]
+}

@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.zouliangbu.footprint.FootprintApp
+import com.zouliangbu.footprint.data.db.TrackSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -28,7 +29,11 @@ class ProfileViewModel(app: Application) : AndroidViewModel(app) {
 
     val stats: StateFlow<ProfileStats> = repo.observeSessions()
         .map { sessions ->
-            val completed = sessions.filter { it.endTime != null }
+            // 只统计自己记录的：导入的 GPX（source=imported）是别人的轨迹，
+            // 不算自己的运动量；跟着线路自己走出来的记录不受影响。
+            val completed = sessions.filter {
+                it.endTime != null && it.source == TrackSession.SOURCE_RECORDED
+            }
             ProfileStats(
                 count = completed.size,
                 totalMeters = completed.sumOf { it.totalDistanceMeters.toDouble() },

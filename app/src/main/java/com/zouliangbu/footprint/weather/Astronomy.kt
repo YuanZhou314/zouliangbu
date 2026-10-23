@@ -39,7 +39,11 @@ object Astronomy {
         val nightEnd: Double?,      // 天文暮光终（-18°）= 可观星开始
         val nightStart: Double?,    // 天文暮光始
         val goldenHourEnd: Double?,
-        val goldenHour: Double?
+        val goldenHour: Double?,
+        /** 日出前太阳升到 -4° 的时刻（晨蓝调的结束点；蓝调 = -6°~-4° 区间）。 */
+        val blueHourRise: Double?,
+        /** 日落后太阳降到 -4° 的时刻（暮蓝调的开始点）。 */
+        val blueHourFall: Double?
     )
 
     data class SunPosition(val altitude: Double, val azimuth: Double)
@@ -230,6 +234,9 @@ object Astronomy {
         val (jnDawn, jnDusk) = pair(-12.0)
         val (jnightEnd, jnightStart) = pair(-18.0)
         val (jgolden, jgoldenEnd) = pair(6.0)
+        // 蓝调时刻的精确端点：太阳 -4°（东升 / 西落各一）。
+        // 与 -6°（dawn/dusk）夹出的区间就是蓝调，比拿 dawn→sunrise 近似准得多。
+        val (jBlueRise, jBlueFall) = pair(-4.0)
         return SunTimes(
             sunrise = jrise,
             sunset = jset,
@@ -240,7 +247,9 @@ object Astronomy {
             nightEnd = jnightEnd,
             nightStart = jnightStart,
             goldenHour = jgolden,
-            goldenHourEnd = jgoldenEnd
+            goldenHourEnd = jgoldenEnd,
+            blueHourRise = jBlueRise,
+            blueHourFall = jBlueFall
         )
     }
 

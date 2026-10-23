@@ -288,4 +288,31 @@ object Landscape {
     /** 银河拱桥大致方位：与太阳方位相对（银心与太阳赤经相差约 180°）。 */
     fun galaxyAzimuth(dateMs: Long, lat: Double, lng: Double): Double =
         Astronomy.galacticCenter(dateMs, lat, lng).azimuth
+
+    /**
+     * 蓝调时刻（blue hour）：太阳高度角 -6°~-4° 的深蓝时段，日出前 / 日落后各一段。
+     *
+     * 这个区间天空呈饱和的深蓝色，城市灯光与天空光比最接近 1:1，
+     * 是拍夜景/剪影的黄金窗口。端点直接取 [Astronomy.SunTimes] 的
+     * dawn/dusk（-6°）与 blueHourRise/Fall（-4°），纯天文推导、零数据源。
+     * 极昼极夜当天不发生，两端为 null。
+     */
+    data class BlueHour(
+        /** 晨段开始（太阳 -6°，= dawn）。 */
+        val morningStart: Double?,
+        /** 晨段结束（太阳 -4° 东升）。 */
+        val morningEnd: Double?,
+        /** 暮段开始（太阳 -4° 西落）。 */
+        val eveningStart: Double?,
+        /** 暮段结束（太阳 -6°，= dusk）。 */
+        val eveningEnd: Double?,
+    )
+
+    /** 由某天的 [Astronomy.SunTimes] 推出晨 / 暮两个蓝调时段。纯函数，供 VM 与单测直接调用。 */
+    fun blueHour(st: Astronomy.SunTimes): BlueHour = BlueHour(
+        morningStart = st.dawn,
+        morningEnd = st.blueHourRise,
+        eveningStart = st.blueHourFall,
+        eveningEnd = st.dusk,
+    )
 }

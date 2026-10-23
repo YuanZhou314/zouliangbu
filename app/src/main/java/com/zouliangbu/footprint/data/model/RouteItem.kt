@@ -15,7 +15,13 @@ data class RouteItem(
     /** 0..N，UI 映射到渐变调色板（CoverPlaceholder） */
     val coverStyle: Int,
     val tags: List<String> = emptyList(),
-    val coverUrl: String? = null
+    val coverUrl: String? = null,
+    /**
+     * 路线起点坐标（GCJ-02）。服务端 feed 正在补充该字段：老服务端 / 本地缓存
+     * 没有时为 null —— 线路地图模式按视口筛选起点 marker 时直接跳过，不报错。
+     */
+    val startLat: Double? = null,
+    val startLng: Double? = null
 )
 
 /** 线路分组，如「口碑山野线」「新手友好线」。 */

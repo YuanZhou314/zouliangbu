@@ -58,7 +58,7 @@ import java.util.Locale
  */
 
 /**
- * 单条记录卡：左侧轨迹缩略图，右侧名称 / 距离 / 时长·速度·爬升 / 估算卡路里。
+ * 单条记录卡：左侧轨迹缩略图，右侧名称 / 距离 / 时长·速度·最高海拔 / 估算卡路里。
  * 卡路里为估算值（徒步 MET≈6 × 65kg × 小时数），App 没有体重数据，只能粗估。
  */
 @OptIn(ExperimentalFoundationApi::class)
@@ -94,13 +94,29 @@ fun TrackCard(
             TrackThumb(points = thumbPoints)
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
-                Text(
-                    track.name ?: formatRange(track.startTime, track.endTime),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        track.name ?: formatRange(track.startTime, track.endTime),
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    // 导入的轨迹打标：别人的路线，不算自己的运动量
+                    if (track.isImported) {
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "导入",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(MaterialTheme.colorScheme.tertiaryContainer)
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "%.2f 公里".format(track.totalDistanceMeters / 1000.0),
@@ -113,7 +129,7 @@ fun TrackCard(
                     Spacer(Modifier.width(10.dp))
                     MetaCell(Icons.Filled.Speed, "%.1f km/h".format(avgSpeedKmh))
                     Spacer(Modifier.width(10.dp))
-                    MetaCell(Icons.Filled.Terrain, "%.0f米".format(track.ascentMeters))
+                    MetaCell(Icons.Filled.Terrain, if (track.maxAltitudeMeters > 0.0) "%.0f米".format(track.maxAltitudeMeters) else "—")
                 }
                 Spacer(Modifier.height(4.dp))
                 Text(

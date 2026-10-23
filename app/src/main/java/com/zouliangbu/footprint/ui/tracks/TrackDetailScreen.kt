@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SentimentNeutral
@@ -50,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -60,8 +62,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -69,13 +75,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.layout.offset
+import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.AmapKey
 import com.zouliangbu.footprint.share.Share
 import com.zouliangbu.footprint.share.ShareCardRenderer
+import com.zouliangbu.footprint.ui.map.MapEngine
+import com.zouliangbu.footprint.ui.map.MapPoint
 import com.zouliangbu.footprint.ui.map.MapViewWrapper
 import com.zouliangbu.footprint.util.Pace
 import com.zouliangbu.footprint.util.TimeFmt
@@ -179,43 +191,105 @@ fun TrackDetailScreen(
         val settle = remember(screenPx) { Animatable(mediumTop) }
         val scope = rememberCoroutineScope()
 
-        // 地图的**实际视口**只到卡片顶边——不能让地图铺满整屏再让卡片盖住下半部分，
-        // 否则 newLatLngBounds 会按整屏适配，轨迹正好落在被遮住的那 2/3 里，
-        // 用户看到的就是"地图没定位到轨迹"。
-        // 只在松手后更新（拖拽中每帧改地图尺寸会让 AMap 反复重排，掉帧）。
-        var settledTop by remember(screenPx) { mutableFloatStateOf(mediumTop) }
+        fun nearestAnchor(v: Float): Float =
+            listOf(minTop, mediumTop, maxTop).minByOrNull { abs(it - v) } ?: mediumTop
 
+        // 换档吸附完成后的落点：吸附后按该档位的可视区重新适配一次 bbox
+        //（地图尺寸不变，只动相机；拖拽过程中绝不适配，避免闪烁）。
+        // 不做这一步的话，拉到底（地图全屏）时轨迹还停在按默认档算的位置 —— 偏在屏幕上部。
+        var settledAnchor by remember(screenPx) { mutableStateOf<Float?>(null) }
+
+        // 拖拽中只动卡片，地图不动 —— 地图铺满全屏做背景（六只脚同款做法）：
+        // 拖拽露出的就是真实地图内容（不再有空白条），地图尺寸与相机全程不变（不再闪烁）。
+        // bbox 适配只在轨迹数据到位时做一次，按「默认档（medium）」的可视区算，
+        // 之后换档不再重新适配 —— 那会造成相机跳变（用户反馈的"闪一下"就是它）。
         val dragState = rememberDraggableState { delta ->
             sheetTop = (sheetTop + delta).coerceIn(minTop, maxTop)
+        }
+
+        // 文字区也能拖动卡片：nestedScroll 接管内容滚动的边界情况。
+        //  - 手指上滑（delta<0）：卡片还没全展开 → 先把位移消耗给卡片（展开），展开完才滚内容；
+        //  - 手指下拉（delta>0）：内容已在顶部滚不动了 → 剩余位移给卡片（收起）；
+        //  - 松手（onPostFling）：卡片不在三档位置上就吸附到最近的一档。
+        val sheetNestedScroll = remember(minTop, mediumTop, maxTop) {
+            object : NestedScrollConnection {
+                override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+                    val delta = available.y
+                    if (delta < 0f && sheetTop > minTop) {
+                        val consumed = delta.coerceAtLeast(minTop - sheetTop)
+                        sheetTop += consumed
+                        return Offset(0f, consumed)
+                    }
+                    return Offset.Zero
+                }
+
+                override fun onPostScroll(
+                    consumed: Offset,
+                    available: Offset,
+                    source: NestedScrollSource
+                ): Offset {
+                    val delta = available.y
+                    if (delta > 0f && sheetTop < maxTop) {
+                        val c = delta.coerceAtMost(maxTop - sheetTop)
+                        sheetTop += c
+                        return Offset(0f, c)
+                    }
+                    return Offset.Zero
+                }
+
+                override suspend fun onPostFling(
+                    consumed: Velocity,
+                    available: Velocity
+                ): Velocity {
+                    val target = nearestAnchor(sheetTop)
+                    if (abs(target - sheetTop) > 1f) {
+                        settle.snapTo(sheetTop)
+                        settle.animateTo(target, tween(240)) { sheetTop = value }
+                    }
+                    settledAnchor = target
+                    return available
+                }
+            }
+        }
+
+        // 引擎引用：定位按钮（收起档）点击后把相机移回当前位置用。
+        var engineRef by remember { mutableStateOf<MapEngine?>(null) }
+
+        LaunchedEffect(settledAnchor, ui.points, engineRef) {
+            val anchor = settledAnchor ?: return@LaunchedEffect
+            val eng = engineRef ?: return@LaunchedEffect
+            if (ui.points.size < 2) return@LaunchedEffect
+            eng.zoomToTrack(
+                ui.points,
+                with(density) { 56.dp.roundToPx() },
+                (screenPx - anchor).roundToInt().coerceAtLeast(0)
+            )
         }
 
         // 背景用 surface 而不是写死的黑色：卡片顶部两个圆角缺口会露出底色，
         // 以前是黑的，看着像"圆角没做对"。
         Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            // ===== 地图（铺满，卡片浮在上面）=====
+            // ===== 地图（铺满全屏做背景，详情卡浮在上面）=====
             if (ui.loading) {
                 CircularProgressIndicator(Modifier.align(Alignment.Center), color = Color.White)
             } else {
                 MapViewWrapper(
-                    // 地图从屏幕最顶（状态栏后面）一直画到卡片顶边 —— 这正好是"可见区"，
-                    // 所以 bbox 适配天然正确，不需要在引擎里做二次偏移。
-                    // 试过「地图铺满整屏 + 用 coveredBottom 补偿」，但 moveCamera 的相机状态是
-                    // 异步生效的，算偏移时读到的是旧值，越调越偏（详见 AmapMapEngine 注释）。
-                    modifier = Modifier.layout { measurable, constraints ->
-                        val h = settledTop.roundToInt().coerceIn(1, constraints.maxHeight)
-                        val placeable = measurable.measure(
-                            Constraints.fixed(constraints.maxWidth, h)
-                        )
-                        layout(constraints.maxWidth, h) { placeable.place(0, 0) }
-                    },
+                    modifier = Modifier.fillMaxSize(),
                     track = ui.points,
                     showEndpoints = true,
                     autoZoom = true,
                     satellite = true,
-                    // 换档后可视区变了，重新适配一次 bbox
-                    fitKey = settledTop,
-                    // 顶部有悬浮圆按钮（44dp）+ 状态栏，留 56dp 不遮挡 marker
-                    fitPaddingDp = 56
+                    // bbox 只在轨迹数据到位时适配一次：按「默认档」可视区（顶部 1/3 屏，
+                    // 下面是卡片）算；换档不重新适配，否则相机跳变 = 用户说的"闪一下"。
+                    fitKey = ui.points,
+                    fitPaddingDp = 56,
+                    // 默认档时卡片盖住的高度：屏幕高 - 卡片顶边
+                    coveredBottomDp = with(density) {
+                        (screenPx - mediumTop).toDp().value.roundToInt()
+                    },
+                    // 详情页的定位按钮由本页自绘在卡片上方（收起档才显示）
+                    showLocateButton = false,
+                    onEngineReady = { engineRef = it }
                 )
                 if (ui.points.isNotEmpty() && !AmapKey.isConfigured(context)) {
                     Text(
@@ -263,12 +337,11 @@ fun TrackDetailScreen(
                             orientation = Orientation.Vertical,
                             onDragStopped = { velocity ->
                                 val projected = sheetTop + velocity * 0.10f
-                                val target = listOf(minTop, mediumTop, maxTop)
-                                    .minByOrNull { abs(it - projected) } ?: mediumTop
-                                settledTop = target
+                                val target = nearestAnchor(projected)
                                 scope.launch {
                                     settle.snapTo(sheetTop)
                                     settle.animateTo(target, tween(240)) { sheetTop = value }
+                                    settledAnchor = target
                                 }
                             }
                         ),
@@ -286,6 +359,7 @@ fun TrackDetailScreen(
                 Column(
                     modifier = Modifier
                         .weight(1f)
+                        .nestedScroll(sheetNestedScroll)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 18.dp)
                         .padding(bottom = 8.dp)
@@ -418,6 +492,18 @@ fun TrackDetailScreen(
                     )
 
                     val xKm = ui.series.totalKm
+
+                    // ---- 沿途常见植物（起点行政区命中才有，静默增强模块）----
+                    ui.plants?.let { guide ->
+                        if (guide.species.isNotEmpty()) {
+                            PlantGuideSection(
+                                regionName = guide.regionName,
+                                species = guide.species,
+                                modifier = Modifier.padding(top = 6.dp)
+                            )
+                            Spacer(Modifier.height(22.dp))
+                        }
+                    }
 
                     TrackChart(
                         series = ui.series.speedKmh,
@@ -556,10 +642,31 @@ fun TrackDetailScreen(
                     }
                 }
             }
+
+            // ===== 定位按钮：只在收起档（文字区拉到底、地图近乎全屏）显示，浮在卡片上方 =====
+            if (compact && !ui.loading && AmapKey.isConfigured(context)) {
+                val footApp = context.applicationContext as FootprintApp
+                Box(
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .offset { IntOffset(0, (sheetTop - with(density) { 64.dp.toPx() }).roundToInt()) }
+                        .padding(end = 16.dp)
+                ) {
+                    FloatingCircleButton(onClick = {
+                        footApp.locationProvider.lastLocation?.let { loc ->
+                            engineRef?.moveTo(MapPoint(loc.latitude, loc.longitude), 16f)
+                        }
+                    }) {
+                        Icon(
+                            Icons.Filled.MyLocation,
+                            contentDescription = "定位到我的位置",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
         }
     }
-
-    // ===== 与上次对比（共同路段）=====
     if (showCompare) {
         AlertDialog(
             onDismissRequest = { showCompare = false },

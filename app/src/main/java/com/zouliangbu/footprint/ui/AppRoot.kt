@@ -1,5 +1,8 @@
 package com.zouliangbu.footprint.ui
 
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -36,7 +39,27 @@ fun AppRoot() {
         rootNav.navigate(AppRoute.trackDetail(sessionId)) { launchSingleTop = true }
     }
 
-    NavHost(navController = rootNav, startDestination = AppRoute.TABS) {
+    // 转场（重要）：必须用**位移**而不是淡入淡出。
+    // 默认的 fade 转场对 Compose 内容有效，但地图是 SurfaceView（GL 渲染），
+    // 不吃 View alpha —— 退出详情页时文字先淡掉、地图却原样杵着零点几秒才消失，
+    // 看起来就是"递进退出"。滑动位移对所有 View 一视同仁，整页同步进退。
+    //
+    // 页面隔离（用户反馈 5）：NavHost 转场是新旧两个 destination 并行组合动画，
+    // 快速进出时看起来两页叠在一起。enter/popEnter 保留滑动入场，exit/popExit
+    // 一律即时移除（None = 旧页当场离场）——返回时旧页瞬间消失，顺带根治
+    // "地图延迟退出"。
+    NavHost(
+        navController = rootNav,
+        startDestination = AppRoute.TABS,
+        enterTransition = {
+            slideInHorizontally(animationSpec = tween(280)) { it }
+        },
+        exitTransition = { ExitTransition.None },
+        popEnterTransition = {
+            slideInHorizontally(animationSpec = tween(280)) { -it / 4 }
+        },
+        popExitTransition = { ExitTransition.None }
+    ) {
         composable(AppRoute.TABS) {
             MainTabsScreen(
                 tabNav = tabNav,
@@ -44,6 +67,9 @@ fun AppRoot() {
                     rootNav.navigate(AppRoute.RECORD) { launchSingleTop = true }
                 },
                 onOpenTrackDetail = openTrackDetail,
+                onFollowRoute = { routeId ->
+                    rootNav.navigate(AppRoute.recordWithReference(routeId)) { launchSingleTop = true }
+                },
                 onOpenGearEdit = { gearId ->
                     rootNav.navigate(AppRoute.gearEdit(gearId)) { launchSingleTop = true }
                 },
@@ -62,6 +88,20 @@ fun AppRoot() {
             RecordScreen(
                 onBack = { rootNav.popBackStack() },
                 onOpenDetail = openTrackDetail
+            )
+        }
+        // 带参考线路的记录页（循迹 b：从线路详情「跟着走」进入）
+        composable(
+            route = AppRoute.RECORD_WITH_REF,
+            arguments = listOf(
+                navArgument(AppRoute.ARG_REF_ROUTE_ID) { type = NavType.LongType }
+            )
+        ) { entry ->
+            val refRouteId = entry.arguments?.getLong(AppRoute.ARG_REF_ROUTE_ID) ?: 0L
+            RecordScreen(
+                onBack = { rootNav.popBackStack() },
+                onOpenDetail = openTrackDetail,
+                refRouteId = refRouteId
             )
         }
         composable(

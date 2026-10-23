@@ -41,25 +41,27 @@ class ContentApiTest {
     @Test
     @DisplayName("搜索命中推荐位线路（回归：推荐位无分组曾导致搜不到）")
     void routeSearchHitsRecommendationRoute() throws Exception {
-        mvc.perform(get("/api/v1/routes").param("keyword", "武功"))
+        mvc.perform(get("/api/v1/routes").param("keyword", "东西冲"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 // 搜索态不展示推荐位，避免顶部出现无关推荐
                 .andExpect(jsonPath("$.data.recommendations.length()").value(0))
                 .andExpect(jsonPath("$.data.sections[0].title").value("搜索结果"))
-                .andExpect(jsonPath("$.data.sections[0].routes[0].name").value("武功山反穿线"));
+                .andExpect(jsonPath("$.data.sections[0].routes[0].name")
+                        .value("东西冲海岸线穿越"));
     }
 
     @Test
     @DisplayName("搜索跨分组命中时保留原分组")
     void routeSearchKeepsSectionGrouping() throws Exception {
-        mvc.perform(get("/api/v1/routes").param("keyword", "莫干山"))
+        // V9 起线路库以深圳线为主（3 个深圳分组），搜索跨分组命中时都要保留原分组
+        mvc.perform(get("/api/v1/routes").param("keyword", "山"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.sections.length()").value(3))
+                .andExpect(jsonPath("$.data.sections.length()").value(4))
                 // 末尾固定追加「最新收录」兜底分组（可为空组）
-                .andExpect(jsonPath("$.data.sections[2].id").value("latest"))
-                .andExpect(jsonPath("$.data.sections[2].title").value("最新收录"))
-                .andExpect(jsonPath("$.data.sections[2].subtitle").isString());
+                .andExpect(jsonPath("$.data.sections[3].id").value("latest"))
+                .andExpect(jsonPath("$.data.sections[3].title").value("最新收录"))
+                .andExpect(jsonPath("$.data.sections[3].subtitle").isString());
     }
 
     @Test
@@ -67,8 +69,9 @@ class ContentApiTest {
     void routeCatalogWithoutKeyword() throws Exception {
         mvc.perform(get("/api/v1/routes"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.recommendations.length()").value(3))
-                // 3 个种子分组 + 末尾「最新收录」兜底分组
+                // V9 的深圳线路：5 个推荐位 + 3 个深圳分组 + 末尾「最新收录」兜底分组。
+                // 分组数会随种子数据变化，这里锁的是「兜底分组一定在最后」这个契约。
+                .andExpect(jsonPath("$.data.recommendations.length()").value(5))
                 .andExpect(jsonPath("$.data.sections.length()").value(4))
                 .andExpect(jsonPath("$.data.sections[3].id").value("latest"));
     }
@@ -93,11 +96,11 @@ class ContentApiTest {
     // 必须"数清字段个数 + 逐个点名"才能拦住。
 
     @Test
-    @DisplayName("契约：route 返回 App 需要的全部 8 个字段")
+    @DisplayName("契约：route 返回 App 需要的全部 10 个字段")
     void routeItemCarriesAllAppRequiredFields() throws Exception {
         mvc.perform(get("/api/v1/routes"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.recommendations[0].length()").value(8))
+                .andExpect(jsonPath("$.data.recommendations[0].length()").value(10))
                 .andExpect(jsonPath("$.data.recommendations[0].id").exists())
                 .andExpect(jsonPath("$.data.recommendations[0].name").exists())
                 .andExpect(jsonPath("$.data.recommendations[0].region").exists())
@@ -105,7 +108,26 @@ class ContentApiTest {
                 .andExpect(jsonPath("$.data.recommendations[0].ascentMeters").exists())
                 .andExpect(jsonPath("$.data.recommendations[0].coverStyle").exists())
                 .andExpect(jsonPath("$.data.recommendations[0].tags").isArray())
-                .andExpect(jsonPath("$.data.recommendations[0].coverUrl").hasJsonPath());
+                .andExpect(jsonPath("$.data.recommendations[0].coverUrl").hasJsonPath())
+                // 起点坐标可空（无轨迹的老线路），但字段本身必须在
+                .andExpect(jsonPath("$.data.recommendations[0].startLat").hasJsonPath())
+                .andExpect(jsonPath("$.data.recommendations[0].startLng").hasJsonPath());
+    }
+
+    @Test
+    @DisplayName("契约：深圳线路（V9 种子，有轨迹点）startLat/startLng 非空且落在深圳市域")
+    void routeItemCarriesStartCoordinateForSeededShenzhenRoute() throws Exception {
+        MvcResult result = mvc.perform(get("/api/v1/routes").param("keyword", "东西冲"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.sections[0].routes[0].name")
+                        .value("东西冲海岸线穿越"))
+                .andReturn();
+        com.fasterxml.jackson.databind.JsonNode item = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(result.getResponse().getContentAsString())
+                .at("/data/sections/0/routes/0");
+        // V9 种子坐标为 GCJ-02，全部落在深圳市域：lat 22.4~22.8, lng 113.7~114.6
+        assertThat(item.get("startLat").asDouble()).isBetween(22.4, 22.8);
+        assertThat(item.get("startLng").asDouble()).isBetween(113.7, 114.6);
     }
 
     @Test

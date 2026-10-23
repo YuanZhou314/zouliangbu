@@ -21,7 +21,11 @@ public final class ContentDtos {
             int ascentMeters,
             int coverStyle,
             List<String> tags,
-            String coverUrl
+            String coverUrl,
+            /** 起点纬度（GCJ-02，取 route_track_point 首个轨迹点）；无轨迹的线路为 null。 */
+            Double startLat,
+            /** 起点经度（GCJ-02）；App 地图同为 GCJ-02，直接透传。 */
+            Double startLng
     ) {
     }
 

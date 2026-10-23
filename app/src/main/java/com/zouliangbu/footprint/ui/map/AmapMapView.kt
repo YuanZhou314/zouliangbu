@@ -1,6 +1,7 @@
 package com.zouliangbu.footprint.ui.map
 
 import android.content.Context
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -41,10 +42,13 @@ import com.zouliangbu.footprint.FootprintApp
 import com.zouliangbu.footprint.data.AmapKey
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 /**
  * 全屏高德地图 Composable。
@@ -72,6 +76,8 @@ import kotlinx.coroutines.launch
 fun AmapMapView(
     modifier: Modifier = Modifier,
     track: List<MapPoint> = emptyList(),
+    /** 参考线（循迹 b）：虚线叠加在实时轨迹下方。 */
+    referenceTrack: List<MapPoint> = emptyList(),
     showEndpoints: Boolean = false,
     autoZoom: Boolean = false,
     fitKey: Any? = null,
@@ -80,6 +86,15 @@ fun AmapMapView(
     coveredBottomDp: Int = 0,
     /** 用卫星图（轨迹回看更有地形感）。 */
     satellite: Boolean = false,
+    /** 是否显示右下角自绘定位按钮（轨迹详情页自己画在卡片上方，这里要关掉）。 */
+    showLocateButton: Boolean = true,
+    /**
+     * 初始相机位置：非空时地图初始化后立即 moveCamera 到该点，并**禁用首点跟随**
+     * （本参数优先，见 followJob）。预览类页面（离线地图查看）用。
+     */
+    initialCamera: MapPoint? = null,
+    /** 初始相机缩放级别（配合 [initialCamera]）。 */
+    initialZoom: Float = 14f,
     onEngineReady: ((MapEngine) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -115,6 +130,24 @@ fun AmapMapView(
     // 点右下角自绘定位按钮可以重新开启。回看模式（autoZoom）永不跟随。
     var followEnabled by remember { mutableStateOf(!autoZoom) }
 
+    // 初始相机（预览类页面）：有 initialCamera 时把相机放到目标区域。
+    // 地图未加载完时 moveCamera 可能被 AMap 丢弃，所以这里立即执行一次、
+    // OnMapLoaded 后再补一次（见上方 onMapLoaded 监听）。
+    val applyInitialCamera: () -> Unit = {
+        initialCamera?.let { p ->
+            runCatching {
+                mapView.map.moveCamera(
+                    CameraUpdateFactory.newLatLngZoom(
+                        LatLng(p.lat, p.lng), initialZoom
+                    )
+                )
+            }
+        }
+    }
+    LaunchedEffect(engine, initialCamera, initialZoom) {
+        applyInitialCamera()
+    }
+
     DisposableEffect(lifecycleOwner, mapView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -139,8 +172,41 @@ fun AmapMapView(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
 
+        // 初始相机校验重试（预览类页面）：onMapLoaded 后每 250ms 读一次 cameraPosition，
+        // 实际位置距目标纬/经度差 > 0.5° 视为 moveCamera 未生效（被 AMap 丢弃），
+        // 重发一次；命中即停，最多 2s（8 次）后放弃。保证命中静态表时相机稳落城市中心。
+        var verifyJob: Job? = null
+        fun verifyInitialCamera() {
+            val target = initialCamera ?: return
+            verifyJob?.cancel()
+            verifyJob = scope.launch {
+                repeat(8) {
+                    delay(250)
+                    val applied = runCatching { mapView.map.cameraPosition }.getOrNull()?.target
+                    if (applied != null &&
+                        abs(applied.latitude - target.lat) <= 0.5 &&
+                        abs(applied.longitude - target.lng) <= 0.5
+                    ) {
+                        return@launch
+                    }
+                    Log.d(
+                        "OfflineMap",
+                        "initial camera not applied (actual=" +
+                            (applied?.latitude ?: -1.0) + "," + (applied?.longitude ?: -1.0) +
+                            " target=" + target.lat + "," + target.lng + "), retry moveCamera"
+                    )
+                    applyInitialCamera()
+                }
+            }
+        }
+
         // 地图加载完成后重放覆盖物：AMap 在地图未就绪时 addPolyline 可能不渲染。
-        val onMapLoaded = AMap.OnMapLoadedListener { engine.reapply() }
+        // 初始相机也在此时补一次：加载前 moveCamera 可能被 AMap 丢弃。
+        val onMapLoaded = AMap.OnMapLoadedListener {
+            engine.reapply()
+            applyInitialCamera()
+            verifyInitialCamera()
+        }
         mapView.map.setOnMapLoadedListener(onMapLoaded)
 
         // 用户拖动 / 缩放地图 → 停止自动跟随，把视野控制权交还用户。
@@ -150,8 +216,9 @@ fun AmapMapView(
         // 首点跟随：拿到第一个有效定位后把相机移到真实位置，避免初始停在默认中心
         //（AMap 默认中心不在国内用户位置，WiFi 下点定位才会跳变）。
         // 回看模式（autoZoom）不跟随定位，否则会和 bbox 缩放互相抢相机。
+        // 指定了初始相机（initialCamera）同样不跟随：预览页要看的是目标城市，不是自己。
         val followJob = scope.launch {
-            if (autoZoom) return@launch
+            if (autoZoom || initialCamera != null) return@launch
             source.firstFix { loc ->
                 mapView.map.animateCamera(
                     CameraUpdateFactory.newLatLngZoom(
@@ -166,6 +233,7 @@ fun AmapMapView(
             mapView.map.setOnMapLoadedListener(null)
             mapView.map.setOnMapTouchListener(null)
             followJob.cancel()
+            verifyJob?.cancel()
             source.destroy()
             scope.cancel()
             // MapView 的 onDestroy 只能调一次：这里统一收口（Compose 销毁与 Activity 销毁
@@ -177,6 +245,11 @@ fun AmapMapView(
     // 轨迹折线：每个新点都会让 track 变成新 List，触发一次 setPoints（O(n)，1 Hz 量级可接受）。
     LaunchedEffect(engine, track) {
         engine.setTrack(track)
+    }
+
+    // 参考线（循迹 b）：整条缓存线路，独立于实时轨迹，虚线叠加。
+    LaunchedEffect(engine, referenceTrack) {
+        engine.setReferenceTrack(referenceTrack)
     }
 
     // 起终点 marker：只有回看模式才画，记录中画了也没意义（终点一直在变）。
@@ -226,20 +299,22 @@ fun AmapMapView(
                 )
             }
         }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 96.dp, end = 16.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xFFFFFFFF), RoundedCornerShape(28.dp))
-                .clickable(onClick = recenterClick)
-                .padding(14.dp)
-        ) {
-            Icon(
-                Icons.Default.MyLocation,
-                contentDescription = "定位到我的位置",
-                tint = Color(0xFF4285F4)
-            )
+        if (showLocateButton) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 96.dp, end = 16.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .background(Color(0xFFFFFFFF), RoundedCornerShape(28.dp))
+                    .clickable(onClick = recenterClick)
+                    .padding(14.dp)
+            ) {
+                Icon(
+                    Icons.Default.MyLocation,
+                    contentDescription = "定位到我的位置",
+                    tint = Color(0xFF4285F4)
+                )
+            }
         }
     }
 }

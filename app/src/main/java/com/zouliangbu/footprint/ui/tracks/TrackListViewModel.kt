@@ -44,12 +44,14 @@ class TrackListViewModel(app: Application) : AndroidViewModel(app) {
     val tracks: StateFlow<List<TrackSummary>> = repo.observeCompleted()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    /** 顶部「总运动累积记录」只统计自己走出来的：导入的 GPX 是别人的轨迹，不算我的运动量。 */
     val stats: StateFlow<RecordsStats> = tracks
         .map { list ->
+            val mine = list.filter { !it.isImported }
             RecordsStats(
-                count = list.size,
-                totalMs = list.sumOf { it.activeDurationMs },
-                totalMeters = list.sumOf { it.totalDistanceMeters.toDouble() }.toFloat()
+                count = mine.size,
+                totalMs = mine.sumOf { it.activeDurationMs },
+                totalMeters = mine.sumOf { it.totalDistanceMeters.toDouble() }.toFloat()
             )
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), RecordsStats(0, 0, 0f))

@@ -21,8 +21,17 @@ data class TrackSummary(
     val pausedMs: Long,
     val ascentMeters: Double,
     val descentMeters: Double,
-    val pointCount: Int
+    val pointCount: Int,
+    /**
+     * 最高海拔（米），由 track_points.altitude 取 MAX 得出（与详情页 maxAltitude 同语义）。
+     * 0 = 无高程数据（空轨迹或点没有海拔），UI 沿用详情页约定显示 "—"。
+     */
+    val maxAltitudeMeters: Double = 0.0,
+    /** v8：recorded=自己记录 / imported=导入。列表上给导入项打标。 */
+    val source: String = TrackSession.SOURCE_RECORDED
 ) {
+    /** 是否外部导入（不是自己的运动量）。 */
+    val isImported: Boolean get() = source == TrackSession.SOURCE_IMPORTED
     /** 活动时长（扣暂停）。 */
     val activeDurationMs: Long
         get() = ((endTime ?: startTime) - startTime - pausedMs).coerceAtLeast(0L)

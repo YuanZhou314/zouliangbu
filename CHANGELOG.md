@@ -9,6 +9,115 @@
 
 ---
 
+## [2026-10-23] 真机反馈修复 5 项（第二轮：离线/地图模式/天气表/转场）
+
+**1 离线地图"已下载"闪现**：SDK 列表异步加载、finally 无条件 loading=false → 先渲染全"未下载"再 0.5s 跳变。VM 加 `amapListReady` 门控（downloaded 非空即 ready；重查轮跑完也置 ready，覆盖零下载场景），ready 前只显示加载态。
+
+**2 预览页仍定位本机位置（上轮修复真机无效）**：排除法坐实根因＝`cityCenter(cityName)` 真机返回 null（SDK OfflineMapCity.city 真实命名与静态表不匹配，含"全国概览图"这类条目）→ initialCamera=null → 首点跟随拉回本机。修三层：① 预览页 initialCamera 永不为 null（未命中回落中国几何中心 zoom4，首点跟随恒禁用）；② AmapMapView 在 OnMapLoaded 后校验重试（250ms 一次，cameraPosition 偏差 >0.5° 就重发 moveCamera，上限 2s）；③ refreshAmap 打印 SDK 城市名列表（截断 20），真机跑一次即可补全静态表。
+- 经验：**"静态链路全对但真机无效"时优先怀疑上游数据形态**（这里就是 city 名对不上表），日志埋点要先于猜测。
+
+**3 地图模式拖拽热区 + 搜索框**：拖拽从 20dp 短横线扩到整个把手栏（~68dp）；中部加搜索框（实时过滤 name/region/tags，大小写不敏感），TextField 优先消费点击、竖拖过 slop 才转拖拽，避免"点搜索框却拖列表"。
+
+**4 页面切换重叠**：NavHost 转场期间新旧两页同时组合——slide/fade 都如此，SurfaceView 地图页尤糟。改为：tab 间切换全 None（即切）；地图覆盖页 enter/popEnter 保留滑入、**exit/popExit 即时移除**（顺带根治 GL 地图延迟退出）；每个 destination 不透明背景。
+
+**5 逐小时多维表改版（莉景天气式）**：行=指标（日期/小时/昼夜天气图标/温度/湿度/雨雪/风速/风向旋转箭头/AQI 国标六档着色/能见度/云量低中高）× 36 小时横滑，左列固定图标+名称+单位，当前小时整列高亮。风向行依赖服务端 hourly 补 `wind_direction_10m`（App 侧已就绪，未发布——下次发布生效）。云分层曲线图未做。
+
+---
+
+**1 离线地图重进"已下载"为空**：`OfflineMapManager` 构造后本地离线索引**异步加载**，首次同步读列表读到空快照且无重试 → initAmap 后 500ms/1.5s/3s 延迟重查，非空即停（`Log.d("OfflineMap")` 打三列表 size 可真机验证）。
+
+**2 已下载地图"查看"定位当前位置**：MapViewWrapper/AmapMapView 加 `initialCamera/initialZoom` 参数（生效时禁用首点跟随）；城市中心查 `OfflineRegionCatalog.CITY_CENTERS` 静态表。
+- 坑：表已扩全国（34 省级 + 20 主要城市），但**「简称+自治区」补后缀对新疆/西藏/广西命不中**（全称含民族名）——5 个自治区必须显式建简称键；省份条目中心点用省会。
+
+**3 删除离线地图无反应**：高德 `OfflineMapManager.remove(String)` 参数是城市**名称**（传省份名会删全省），代码传了 `c.code` → 静默无效。改 `remove(c.name)`，onAmap 失败写 amapError。
+
+**4 景观天气页增强**
+- 蓝调时刻：Astronomy 补太阳 -4° 精确解（晨/暮两段，纯本地计算）；指标卡 2×2→5 卡，等级用 5 段色阶点亮条。
+- 未来 3 天：服务端 OpenMeteoClient 加 `daily=` 块 + `forecast_days=4`，App 加 daily DTO + 区块。
+- 逐小时多维表（天气/温度/湿度/降水/风速/空气/能见度 7 列，冻结首列，≤36 行）：空气质量走 Open-Meteo **独立端点** `air-quality-api.open-meteo.com`（服务端合并顶层 `airHourly`，上游挂掉只省略该字段）。
+- **大坑：Open-Meteo 必须带 `timezone=Asia/Shanghai`**，否则 UTC 切日导致每天 0–8 点"明天/后天"标签差一天，且 App 时刻解析整体偏 8h——服务端常量 `QUERY_TIMEZONE` 与 App `queryZone` 两端必须一致。
+
+**5 详情页 1/3 全览相机（第 4 遍，找到真根因）**：`applyZoom` 展开档 `availH.coerceAtLeast(60)` + `zoom.coerceIn(3.0,18)` → zoom 被钳 3.0 但南移补偿 dLat 仍按 zoom3 的 mpp（≈20km/px）算 → 相机甩数千公里外、轨迹跑出可视区上方；且 `pendingZoom` 无失效机制被 OnMapLoaded/切卫星图 reapply 反复重放坏相机。修法：availH<120 或 zoom<4.0 跳过 fit+清 pending；pending 只存 viewSize(0,0) 未生效请求，apply 成功即清。**用户说"记录页"实为轨迹详情页**（记录页是全屏地图）。
+
+**6 轨迹卡片第三项**：改显示最高海拔——`observeCompleted` 投影加 `(SELECT MAX(p.altitude) FROM track_points p WHERE p.sessionId=s.id) AS maxAltitudeMeters` 子查询，无需 Room 迁移；0=无高程显示"—"。
+
+**7 地图模式定位北京**：`autoZoom=true` 会禁用首点跟随（AmapMapView 防抢相机设计）→ 改传 false 走 firstFix 定位本机，选中线路后靠 fitKey 手动 zoomToTrack。
+
+**8 地图模式视口卡片**（新功能）：服务端 feed `RouteItem` 加可空 `startLat/startLng`（route_track_point 首点，GCJ-02 直传，ContentApiTest 有深圳市域断言）；MapEngine 加 `visibleBounds/onCameraIdle/onMarkerClick/showPointMarkers`；相机停下按视口+20% 边距筛起点 marker（≤20 最近），点 marker=选中该线路。
+- 坑：marker 点击映射**不能按下标平行对位**（addMarker 失败就错位、点 A 选成 B）——用 `Map<Marker, String>` 按引用直查。
+- 拖拽列表三档吸附（地图比例 0.04/0.5/0.92，`nearestAnchor` 纯函数+单测）。**地图模式当前没有搜索框**，"下档只留搜索框"按把手栏可见取值。
+
+**9 返回动画（地图模式/离线预览/轨迹预览）**：上轮只修了外层 NavHost，内层 `MainTabsScreen` NavHost 仍是默认 fade——SurfaceView 不吃 alpha → 文字先隐、GL 地图延迟退出。内层补同款 slide 四件套。
+
+验证：App `:app:testDebugUnitTest` 142/142、服务端 70/70、compileDebugKotlin 绿；Ray 审查 P0=0（P1×1 已修，P2×6 记录在 `.agent-runs/2026-10-23/task-001/ray-review.md`）。未提交。
+
+---
+
+**1 离线地图**（两个真根因）
+- `OfflineMapStatus.LOADING == 0`，而**未下载城市的默认 state 就是 0** → 全页被判「下载中」转圈。
+  改以 SDK `getDownloadOfflineMapCityList()`（已下载）/ `getDownloadingCityList()`（下载中）判定；
+  暂停以 state(PAUSE/STOP) 为准（暂停后城市仍在下载队列里，只看队列会误判）。
+- `OfflineMapManager` 构造里 `new Handler()`，**在 IO 线程创建会静默失败** → 点了下载没反应、退出再进还转圈。
+  所有 SDK 调用改 `Dispatchers.Main`。
+- 已下载置顶单独分区、可点击进全屏预览页；下载中 700ms 轮询刷进度。
+
+**2 底部 Tab**：只有首页/线路/装备/我的四个主页显示，二级三级页全屏。
+
+**3 景观天气页**重写（696 行）：渐变头部卡 + Canvas 日出弧（标当前时刻）+ 2×2 朝霞/晚霞/云海/观星 + 雷达占位。
+- 修真 bug：`fmtMin` 把 UTC 分钟当本地时间打印，中国时区日出差 8 小时。
+
+**4 详情页 1/3 总览相机**：`applyZoom` 改同步确定性算法（自算 Web Mercator zoom + 相机南移 covered/2 像素，一次 moveCamera）。
+- 原「newLatLngBounds + 延时读相机再补偿」是两步异步，会被切卫星图触发的重放打断 → 一错就整体偏，必须下拉才看到轨迹。
+
+**5 总运动累积剔除导入**：列表页与首页月度汇总都过滤 `source=imported`（常量 `TrackSession.SOURCE_IMPORTED`）。
+
+**6 导入 0 米爬升**：`importTrack` 补 `Elevation.ascentOf()` 落库 ascent/descent。
+
+**7 服务端深圳线路**（Flyway `common/V9__shenzhen_routes.sql`，已上线）
+- 15 条深圳线路，各含正文/交通/难度/路况/景观 + 40~80 轨迹点 + 3~6 标注点（共 868 点 / 82 标注）。
+- V9 末尾把「无 route_detail 的旧占位线路」置 `status=0` 下线，保证线路页条条有内容。
+- 生成脚本 `zouliangbu-server/scripts/gen_shenzhen_routes.py`。
+- 坑：① 脚本末行笔误 `ROUTESS` ② 正文混进乱码英文词，清理正则**只能清单引号字面量内部**，
+     按「全文件删英文词」会误删 INSERT/route 等 SQL 关键字 ③ MySQL 对 UPDATE 目标表出现在子查询有 1093
+     限制 → 用 `NOT IN`（子查询只查 route_detail）。
+- 改测试后 `zlb-dev.db` 的 V9 校验和不匹配 → 删库重建（`*.db` 已 gitignore）。
+
+**8 线路地图模式**（`RouteMapModeScreen`，466 行）：上半屏地图 + 下半屏列表，中间把手拖拽（25%~75%）。
+- 地图按整屏高度测量、只移动列表，MapView 不重新 measure → 不闪。
+- 坑：子 agent 漏 `import androidx.compose.ui.input.pointer.pointerInput`。
+
+**验证**：`compileDebugKotlin` + `testDebugUnitTest` **119/119 绿**；服务端 `mvn test` **69/69 绿**；
+发布 `20261023-182735-c9de946-dirty`，线上 17 条线路逐条 check（正文 390~712 字 / 轨迹 40~80 点 / 标注 3~6 个）全合格；
+APK buildNumber=24。
+**遗留**：线上「最新收录」两条同名「苏州中国地图徒步」（id 13/14，重复提交的审批数据，正文 128 字无轨迹）待清理。
+
+---
+
+## [2026-10-23] 竞品分析 + 循迹 a+b（线路离线缓存 + 记录页参考线）
+
+**决策**（详见 `COMPETITOR-ANALYSIS.md`，跨会话沉淀）：
+- 两步路押「安全+离线 GIS」、六只脚押「回顾+成品分享」，共同成功点＝记录之后的增值。
+- 走两步唯一能赢的牌＝「经审核的线路库 + 干净的记录引擎」，接起来（循迹）最值。
+- 用户明确**真机户外记录暂缓**（没空出门），先做不依赖户外的循迹 a+b。
+
+**循迹 a：线路轨迹离线缓存**
+- Room v7：新增 `route_cache`（routeId 唯一）+ `route_cache_point`（外键 CASCADE）两张表，
+  `MIGRATION_6_7` + `schemas/7.json` 入库。
+- `RouteCacheDao` + `TrackRepository` 新增 `getCachedRoutePoints / hasCachedRoute / saveRouteCache / deleteRouteCache`。
+- `RouteDetailScreen`：线路轨迹地图下方加「下载离线」（写入缓存，覆盖式）+「跟着走」按钮（须先缓存）。
+
+**循迹 b：记录页叠加参考线**
+- `MapEngine.setReferenceTrack`（虚线、青色 `#00BCD4`、zIndex 5 压在实时轨迹下）+ `AmapMapEngine` 实现 + reapply。
+- `MapViewWrapper` / `AmapMapView` 加 `referenceTrack` 参数。
+- `RecordScreen` 加 `refRouteId`（可选）→ `RecordViewModel.loadReferenceRoute` 读缓存转 MapPoint；
+  无缓存时 Toast 提示「先下载离线」。
+- 导航：`AppRoute.RECORD_WITH_REF`（`record?refRouteId=`）；`MainTabsScreen.onFollowRoute` → `AppRoot` 跳记录页。
+
+**验证**：`compileDebugKotlin` 通过；单测 **119/119 绿**（0 失败，含并行会话新增 18 例）。
+**未做**：偏航/到点提醒（循迹 c，需真机）；`route_cache` 无 JVM 单测（Room 迁移靠 schema 比对，无迁移测试基建）。
+
+---
+
 ## [2026-10-22] 服务端发布到线上（V7 社区共维护上线）
 
 - **发布**：`bash deploy/release.sh`（默认用户已改成 ubuntu）。线上切到 `20261022-151907-6c07651-dirty`，

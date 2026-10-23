@@ -42,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -93,6 +94,8 @@ private data class GpsFix(
 fun RecordScreen(
     onBack: () -> Unit,
     onOpenDetail: (Long) -> Unit,
+    /** 参考线路 id（循迹 b）：从线路详情「跟着走」进入时非 0，叠加已缓存线路。 */
+    refRouteId: Long = 0L,
     vm: RecordViewModel = viewModel()
 ) {
     val context = LocalContext.current
@@ -100,10 +103,34 @@ fun RecordScreen(
     val sessions by vm.sessions.collectAsStateWithLifecycle()
     // 实时轨迹：Service 每落一个点推一次，ViewModel 追加后这里跟着重组，地图折线就"长"出来。
     val track by vm.track.collectAsStateWithLifecycle()
+    // 参考线（循迹 b）：已缓存线路的轨迹点。
+    val referenceTrack by vm.referenceTrack.collectAsStateWithLifecycle()
     // 上次被系统杀掉留下的悬挂会话：App 启动时已自动收尾保存，这里只提示一次。
     val recovered by vm.orphaned.collectAsStateWithLifecycle()
     val isRecording = snapshot != null
     val isPaused = snapshot?.paused == true
+
+    // 参考线路加载失败提示（无离线缓存）。
+    var refLoadFailed by remember { mutableStateOf(false) }
+
+    // 进入时加载参考线（只加载一次，refRouteId 为 0 时跳过）。
+    LaunchedEffect(refRouteId) {
+        if (refRouteId != 0L) {
+            val ok = vm.loadReferenceRoute(refRouteId)
+            if (!ok) refLoadFailed = true
+        }
+    }
+
+    // 参考线没缓存时给一次性提示（不打断记录流程）。
+    LaunchedEffect(refLoadFailed) {
+        if (refLoadFailed) {
+            Toast.makeText(
+                context,
+                "这条线路还没下载离线轨迹，请先在详情页「下载离线」",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
 
     // 摘要对话框：service stop 后展示
     var summaryFor by remember { mutableStateOf<Long?>(null) }
@@ -165,6 +192,7 @@ fun RecordScreen(
         MapViewWrapper(
             modifier = Modifier.fillMaxSize(),
             track = track,
+            referenceTrack = referenceTrack,
             onEngineReady = { mapEngine = it }
         )
 
@@ -259,14 +287,15 @@ fun RecordScreen(
             }
         }
 
-        // 底部控制栏：未记录时一个大 GO 圆钮（仿两步路）；记录中显示暂停/停止条。
+        // 底部控制栏：未记录时一个大 GO 圆钮（仿两步路），除圆钮外整条透明，
+        // 露出地图；记录中显示暂停/停止条，恢复实心底。
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .navigationBarsPadding(),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+            color = if (!isRecording) Color.Transparent else MaterialTheme.colorScheme.surface,
+            tonalElevation = if (!isRecording) 0.dp else 8.dp
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),

@@ -12,10 +12,14 @@ import com.zouliangbu.server.content.entity.RouteSectionEntity;
 import com.zouliangbu.server.content.mapper.GearCategoryMapper;
 import com.zouliangbu.server.content.mapper.RouteMapper;
 import com.zouliangbu.server.content.mapper.RouteSectionMapper;
+import com.zouliangbu.server.route.RouteTrackPointEntity;
+import com.zouliangbu.server.route.mapper.RouteTrackPointMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,13 +36,17 @@ public class ContentQueryService {
     private final RouteMapper routeMapper;
     private final RouteSectionMapper routeSectionMapper;
     private final GearCategoryMapper gearCategoryMapper;
+    /** 只用来取线路起点（首轨迹点），跨包复用 route 域的 mapper。 */
+    private final RouteTrackPointMapper routeTrackPointMapper;
 
     public ContentQueryService(RouteMapper routeMapper,
                                RouteSectionMapper routeSectionMapper,
-                               GearCategoryMapper gearCategoryMapper) {
+                               GearCategoryMapper gearCategoryMapper,
+                               RouteTrackPointMapper routeTrackPointMapper) {
         this.routeMapper = routeMapper;
         this.routeSectionMapper = routeSectionMapper;
         this.gearCategoryMapper = gearCategoryMapper;
+        this.routeTrackPointMapper = routeTrackPointMapper;
     }
 
     /** 线路目录：横向推荐位 + 分组；keyword 过滤名称/地区，命中后只保留非空分组。 */
@@ -80,13 +88,19 @@ public class ContentQueryService {
             }
         }
 
+        // 起点坐标一次装配：只会出现在响应里的线路才查（去重），每条一次 LIMIT 1 子查询，
+        // 15~30 条线路约 30 次索引查询，不做全轨迹拉取。
+        java.util.LinkedHashSet<RouteEntity> catalogRoutes = new java.util.LinkedHashSet<>(matched);
+        catalogRoutes.addAll(recommendRows);
+        Map<Long, double[]> startById = firstTrackPoints(catalogRoutes);
+
         List<RouteSection> sections = new ArrayList<>(sectionRows.stream()
                 .map(s -> new RouteSection(
                         String.valueOf(s.getId()),
                         s.getTitle(),
                         s.getSubtitle() == null ? "" : s.getSubtitle(),
                         bySection.getOrDefault(s.getId(), List.of()).stream()
-                                .map(this::toRouteItem).toList()))
+                                .map(r -> toRouteItem(r, startById)).toList()))
                 .filter(s -> !s.routes().isEmpty())
                 .toList());
 
@@ -96,7 +110,7 @@ public class ContentQueryService {
                     "search",
                     "搜索结果",
                     "",
-                    loose.stream().map(this::toRouteItem).toList()));
+                    loose.stream().map(r -> toRouteItem(r, startById)).toList()));
         }
 
         // 兜底分组「最新收录」：section_id=NULL 且非推荐位的已上线线路（审批导入 /
@@ -107,13 +121,13 @@ public class ContentQueryService {
                 .sorted(java.util.Comparator.comparing(RouteEntity::getId,
                         java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
                 .limit(12)
-                .map(this::toRouteItem)
+                .map(r -> toRouteItem(r, startById))
                 .toList();
         sections.add(new RouteSection("latest", "最新收录", "", latestItems));
 
         // 搜索时就隐藏推荐位，避免"搜了关键词但顶部还是无关推荐"的割裂感
         List<RouteItem> recommendations = kw.isEmpty()
-                ? recommendRows.stream().map(this::toRouteItem).toList()
+                ? recommendRows.stream().map(r -> toRouteItem(r, startById)).toList()
                 : List.of();
 
         return new RouteCatalog(recommendations, sections);
@@ -134,7 +148,7 @@ public class ContentQueryService {
         return source != null && source.toLowerCase().contains(keyword.toLowerCase());
     }
 
-    private RouteItem toRouteItem(RouteEntity r) {
+    private RouteItem toRouteItem(RouteEntity r, Map<Long, double[]> startById) {
         List<String> tags = (r.getTags() == null || r.getTags().isBlank())
                 ? List.of()
                 : Arrays.stream(r.getTags().split(","))
@@ -143,6 +157,8 @@ public class ContentQueryService {
                 .toList();
         // coverStyle：无真实封面图时，用 id 取模让客户端选择渐变色板
         int coverStyle = r.getId() == null ? 0 : (int) (r.getId() % 5);
+        // 起点坐标：route_track_point 首点（GCJ-02），App 地图同为 GCJ-02 直接透传；无轨迹为 null
+        double[] start = r.getId() == null ? null : startById.get(r.getId());
         return new RouteItem(
                 String.valueOf(r.getId()),
                 r.getName(),
@@ -151,6 +167,31 @@ public class ContentQueryService {
                 r.getAscentMeters() == null ? 0 : r.getAscentMeters(),
                 coverStyle,
                 tags,
-                r.getCoverUrl());
+                r.getCoverUrl(),
+                start == null ? null : start[0],
+                start == null ? null : start[1]);
+    }
+
+    /**
+     * 批量取「每条线路的第一个轨迹点」作为起点坐标（lat, lng）。
+     * 每条一次 LIMIT 1 子查询（route_id+seq 有索引），无轨迹点的线路不出现在结果里。
+     */
+    private Map<Long, double[]> firstTrackPoints(Collection<RouteEntity> routes) {
+        Map<Long, double[]> out = new HashMap<>();
+        for (RouteEntity r : routes) {
+            if (r.getId() == null || out.containsKey(r.getId())) {
+                continue;
+            }
+            List<RouteTrackPointEntity> rows = routeTrackPointMapper.selectList(
+                    new LambdaQueryWrapper<RouteTrackPointEntity>()
+                            .eq(RouteTrackPointEntity::getRouteId, r.getId())
+                            .orderByAsc(RouteTrackPointEntity::getSeq)
+                            .orderByAsc(RouteTrackPointEntity::getId)
+                            .last("LIMIT 1"));
+            if (!rows.isEmpty() && rows.get(0).getLat() != null && rows.get(0).getLng() != null) {
+                out.put(r.getId(), new double[]{rows.get(0).getLat(), rows.get(0).getLng()});
+            }
+        }
+        return out;
     }
 }

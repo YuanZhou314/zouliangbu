@@ -47,7 +47,9 @@ interface TrackSessionDao {
                s.pausedMs AS pausedMs,
                s.ascentMeters AS ascentMeters,
                s.descentMeters AS descentMeters,
-               (SELECT COUNT(*) FROM track_points p WHERE p.sessionId = s.id) AS pointCount
+               s.source AS source,
+               (SELECT COUNT(*) FROM track_points p WHERE p.sessionId = s.id) AS pointCount,
+               (SELECT MAX(p.altitude) FROM track_points p WHERE p.sessionId = s.id) AS maxAltitudeMeters
         FROM track_sessions s
         WHERE s.endTime IS NOT NULL
         ORDER BY s.startTime DESC

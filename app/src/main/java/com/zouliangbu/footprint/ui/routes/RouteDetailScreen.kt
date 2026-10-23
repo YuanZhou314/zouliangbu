@@ -1,5 +1,6 @@
 package com.zouliangbu.footprint.ui.routes
 
+import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zouliangbu.footprint.data.remote.ContentApiFactory
@@ -30,7 +32,9 @@ import com.zouliangbu.footprint.data.remote.MarkerDto
 import com.zouliangbu.footprint.ui.components.CoverPlaceholder
 import com.zouliangbu.footprint.ui.map.MapPoint
 import com.zouliangbu.footprint.ui.map.MapViewWrapper
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -45,13 +49,20 @@ import kotlinx.coroutines.withContext
 fun RouteDetailScreen(
     routeId: Long,
     onBack: () -> Unit,
-    onOpenTrackPreview: (Long) -> Unit = {}
+    onOpenTrackPreview: (Long) -> Unit = {},
+    /** 循迹 b：「跟着走」——跳到记录页并叠加这条线路为参考线。 */
+    onFollowRoute: (Long) -> Unit = {}
 ) {
     var detail by remember { mutableStateOf<RouteDetail?>(null) }
     var trackPoints by remember { mutableStateOf<List<TrackPointDto>>(emptyList()) }
     var markers by remember { mutableStateOf<List<MarkerDto>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf(false) }
+    var cached by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
+
+    val app = LocalContext.current.applicationContext as android.app.Application
+    val context = LocalContext.current
 
     LaunchedEffect(routeId) {
         withContext(Dispatchers.IO) {
@@ -64,6 +75,33 @@ fun RouteDetailScreen(
                 markers = m.data ?: emptyList()
             }.onFailure { loadError = true }
             loading = false
+            // 查离线缓存状态
+            cached = (app as com.zouliangbu.footprint.FootprintApp).repository.hasCachedRoute(routeId)
+        }
+    }
+
+    // 「下载离线」：把当前拉到的轨迹点写入 Room 缓存。
+    fun downloadOffline() {
+        if (trackPoints.isEmpty()) {
+            Toast.makeText(context, "这条线路没有轨迹点，无法缓存", Toast.LENGTH_SHORT).show()
+            return
+        }
+        downloading = true
+        kotlinx.coroutines.CoroutineScope(Dispatchers.IO).launch {
+            val repo = (app as com.zouliangbu.footprint.FootprintApp).repository
+            val pts = trackPoints.mapIndexed { i, p ->
+                com.zouliangbu.footprint.data.db.RouteCachePoint(
+                    cacheId = 0L,
+                    seq = p.seq.takeIf { it > 0 } ?: i,
+                    lat = p.lat,
+                    lng = p.lng,
+                    altitude = p.altitude
+                )
+            }
+            repo.saveRouteCache(routeId, detail?.name ?: "线路 $routeId", pts)
+            downloading = false
+            cached = true
+            Toast.makeText(context, "已缓存 ${pts.size} 个轨迹点，可离线跟着走", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -150,6 +188,36 @@ fun RouteDetailScreen(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
                             textAlign = TextAlign.Center
                         )
+                    }
+                    // 循迹 a+b：下载离线 + 跟着走
+                    if (pts.isNotEmpty()) {
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { downloadOffline() },
+                                enabled = !downloading,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text(if (cached) "已缓存（重新下载）" else "下载离线")
+                            }
+                            Button(
+                                onClick = { onFollowRoute(routeId) },
+                                enabled = cached,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("跟着走")
+                            }
+                        }
+                        if (!cached) {
+                            Text(
+                                "「跟着走」需先下载离线轨迹，进山无信号也能看参考线",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 2.dp)
+                            )
+                        }
                     }
                 }
 

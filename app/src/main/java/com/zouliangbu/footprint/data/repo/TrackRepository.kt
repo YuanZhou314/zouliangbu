@@ -2,6 +2,8 @@ package com.zouliangbu.footprint.data.repo
 
 import androidx.room.withTransaction
 import com.zouliangbu.footprint.data.db.AppDatabase
+import com.zouliangbu.footprint.data.db.RouteCache
+import com.zouliangbu.footprint.data.db.RouteCachePoint
 import com.zouliangbu.footprint.data.db.TrackPoint
 import com.zouliangbu.footprint.data.db.TrackSession
 import com.zouliangbu.footprint.data.db.TrackSummary
@@ -17,6 +19,7 @@ class TrackRepository(private val db: AppDatabase) {
 
     private val sessionDao = db.sessionDao()
     private val pointDao = db.pointDao()
+    private val routeCacheDao = db.routeCacheDao()
 
     // ===== 记录流程 =====
 
@@ -87,12 +90,18 @@ class TrackRepository(private val db: AppDatabase) {
         endTime: Long,
         distanceMeters: Float
     ): Long = db.withTransaction {
+        // 导入的轨迹也要算爬升/下降：列表卡第三项就是它，不算是 0 米（用户反馈）。
+        // 文件里没有海拔字段时 GpxImport 全部填 0，算出来自然是 0 —— 这是诚实的，不猜。
+        val ascent = com.zouliangbu.footprint.util.Elevation.ascentOf(points)
         val id = sessionDao.insert(
             TrackSession(
                 startTime = startTime,
                 endTime = endTime,
                 totalDistanceMeters = distanceMeters,
-                name = name?.takeIf { it.isNotBlank() }
+                name = name?.takeIf { it.isNotBlank() },
+                ascentMeters = ascent.ascentMeters,
+                descentMeters = ascent.descentMeters,
+                source = TrackSession.SOURCE_IMPORTED
             )
         )
         pointDao.insertAll(points.map { it.copy(sessionId = id) })
@@ -103,5 +112,39 @@ class TrackRepository(private val db: AppDatabase) {
     suspend fun deleteSession(id: Long) = db.withTransaction {
         pointDao.deleteForSession(id)
         sessionDao.deleteById(id)
+    }
+
+    // ===== 线路离线缓存（循迹 a）=====
+
+    /** 取某线路的离线轨迹点（无缓存返回空）。按 seq 升序，坐标 GCJ-02。 */
+    suspend fun getCachedRoutePoints(routeId: Long): List<RouteCachePoint> =
+        routeCacheDao.getPoints(routeId)
+
+    /** 某线路是否已缓存。 */
+    suspend fun hasCachedRoute(routeId: Long): Boolean =
+        routeCacheDao.has(routeId) > 0
+
+    /**
+     * 保存一条线路的离线轨迹（覆盖式：删旧缓存再插新的）。
+     *
+     * 缓存元数据与轨迹点放**同一事务**：中途中止不留下「有元数据没点」的脏缓存。
+     */
+    suspend fun saveRouteCache(routeId: Long, name: String, points: List<RouteCachePoint>) =
+        db.withTransaction {
+            routeCacheDao.delete(routeId)
+            val cacheId = routeCacheDao.insert(
+                RouteCache(
+                    routeId = routeId,
+                    name = name,
+                    fetchedAt = System.currentTimeMillis(),
+                    pointCount = points.size
+                )
+            )
+            routeCacheDao.insertPoints(points.map { it.copy(cacheId = cacheId) })
+        }
+
+    /** 删除某线路的离线缓存。 */
+    suspend fun deleteRouteCache(routeId: Long) {
+        routeCacheDao.delete(routeId)
     }
 }

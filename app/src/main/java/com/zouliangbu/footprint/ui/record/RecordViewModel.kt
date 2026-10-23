@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -60,6 +61,10 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
     val track: StateFlow<List<MapPoint>> = rawPoints
         .map { list -> list.map { MapPoint(it.lat, it.lng) } }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 参考线（循迹 b）：已缓存线路的轨迹点，叠加在实时轨迹下方。 */
+    private val _referenceTrack = MutableStateFlow<List<MapPoint>>(emptyList())
+    val referenceTrack: StateFlow<List<MapPoint>> = _referenceTrack.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -139,6 +144,22 @@ class RecordViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val id = repo.startSession(System.currentTimeMillis())
             onReady(id)
+        }
+    }
+
+    /**
+     * 加载一条已缓存线路作为参考线（循迹 b）。
+     *
+     * 无缓存（线路没下载过离线）返回 null，UI 侧提示先下载；
+     * 有缓存则把点转成 [MapPoint] 推给 [referenceTrack]。
+     */
+    suspend fun loadReferenceRoute(routeId: Long): Boolean = withContext(Dispatchers.IO) {
+        val pts = repo.getCachedRoutePoints(routeId)
+        if (pts.isEmpty()) {
+            false
+        } else {
+            _referenceTrack.value = pts.map { MapPoint(it.lat, it.lng) }
+            true
         }
     }
 

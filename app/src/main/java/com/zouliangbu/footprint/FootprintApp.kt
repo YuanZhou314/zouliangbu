@@ -49,6 +49,11 @@ class FootprintApp : Application() {
         com.zouliangbu.footprint.weather.WeatherRepository(database)
     }
 
+    // 植物图鉴（纯本地 assets：行政区 -> TopN 常见植物，离线可用，服务端不参与）。
+    val plantGuideRepository: com.zouliangbu.footprint.plants.PlantGuideRepository by lazy {
+        com.zouliangbu.footprint.plants.PlantGuideRepository(this)
+    }
+
     override fun onCreate() {
         super.onCreate()
         // 恢复本地登录会话（token/uid/用户名，SharedPreferences）

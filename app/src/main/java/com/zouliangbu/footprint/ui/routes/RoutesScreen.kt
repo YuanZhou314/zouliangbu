@@ -72,6 +72,7 @@ import com.zouliangbu.footprint.ui.components.SectionHeader
 @Composable
 fun RoutesScreen(
     onOpenDetail: (Long) -> Unit = {},
+    onOpenMapMode: () -> Unit = {},
     vm: RoutesViewModel = viewModel()
 ) {
     val state by vm.uiState.collectAsStateWithLifecycle()
@@ -106,7 +107,7 @@ fun RoutesScreen(
                     "地图模式",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.clickable(enabled = false) { /* 暂未实现 */ }
+                    modifier = Modifier.clickable { onOpenMapMode() }
                 )
                 Spacer(Modifier.width(16.dp))
                 Text(
